@@ -21,8 +21,12 @@ class Settings(BaseSettings):
         "image/tiff",
     )
 
-    # deduplication using sha256
+    # Deduplication using sha256
     ENABLE_DEDUP: bool = True
+
+    # Extract text from PDF
+    MAX_PDF_PAGES: int = 250
+    TEXT_EMPTY_MIN_CHARS: int = 20  # heuristic: < 20 chars extracted
 
 
 settings = Settings()
