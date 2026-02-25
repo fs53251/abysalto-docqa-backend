@@ -19,7 +19,7 @@ jobs:
         run: pipx install poetry
 
       - name: Install deps
-        run: poetry install
+        run: poetry install --no-root
 
       - name: Lint (ruff)
         run: poetry run ruff check .
