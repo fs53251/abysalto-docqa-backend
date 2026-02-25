@@ -1,0 +1,80 @@
+# =========================
+# Environment / secrets
+# =========================
+.env
+.env.*
+!.env.example
+
+# =========================
+# Python cache / compiled
+# =========================
+__pycache__/
+*.py[cod]
+*.pyd
+*.so
+*.egg-info/
+.eggs/
+*.egg
+
+# =========================
+# Virtual environments
+# =========================
+.venv/
+venv/
+ENV/
+env/
+
+# =========================
+# Poetry
+# =========================
+poetry.lock
+
+# =========================
+# Testing / coverage
+# =========================
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+.tox/
+.nox/
+
+# =========================
+# Logs
+# =========================
+*.log
+logs/
+
+# =========================
+# IDE / Editor
+# =========================
+.vscode/
+.idea/
+*.iml
+
+# maxOS
+.DS_Store
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# =========================
+# Project runtime data
+# =========================
+data/uploads/*
+data/processed/*
+!data/uploads/.gitkeep
+!data/processed/.gitkeep
+
+# =========================
+# Build / dist
+# =========================
+build/
+dist/
+pip-wheel-metadata/
+
+# =========================
+# Docker
+# =========================
+*.pid

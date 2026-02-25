@@ -1,0 +1,37 @@
+[tool.poetry]
+name = "abysalto-project"
+version = "0.1.0"
+description = "AI-driven Document Insight Service"
+authors = ["Filip Šiktar <filip.siktar@fer.hr>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+fastapi = "^0.133.0"
+uvicorn = "^0.41.0"
+pydantic-settings = "^2.13.1"
+python-multipart = "^0.0.22"
+
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^9.0.2"
+httpx = "^0.28.1"
+ruff = "^0.15.2"
+black = "^26.1.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.black]
+line-length = 100
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
