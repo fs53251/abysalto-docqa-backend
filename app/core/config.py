@@ -10,5 +10,19 @@ class Settings(BaseSettings):
     DATA_DIR: str = "./data"
     JWT_SECRET: str = "CHANGE_ME"
 
+    # Upload config
+    MAX_UPLOAD_MB: int = 25
+    MAX_FILES_PER_REQUEST: int = 10
+    ALLOWED_EXTENSIONS: tuple[str, ...] = (".pdf", ".png", ".jpg", ".jpeg", ".tif", ".tiff")
+    ALLOWED_MIME_TYPES: tuple[str, ...] = (
+        "application/pdf",
+        "image/png",
+        "image/jpeg",
+        "image/tiff",
+    )
+
+    # deduplication using sha256
+    ENABLE_DEDUP: bool = True
+
 
 settings = Settings()
