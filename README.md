@@ -3,7 +3,7 @@
 Backend service for document ingestion and Q@A (FastAPI + Poetry)
 
 ## Requirements
-- Python 3.11+
+- Python 3.12+
 - Poetry
 
 ## Setup
