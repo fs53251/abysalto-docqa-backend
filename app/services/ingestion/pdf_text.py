@@ -7,6 +7,7 @@ from typing import Any
 import fitz  # PyMuPDF
 
 from app.core.config import settings
+from app.services.ingestion.ocr import ocr_image_bytes
 from app.storage.files import ensure_dir
 from app.storage.processed import get_text_json_path
 
@@ -20,7 +21,8 @@ class PageText:
     text: str
     char_count: int
     is_empty: bool
-    source: str  # "pymupdf"
+    source: str  # "pymupdf" | "easyocr"
+    confidence: float | None
 
 
 @dataclass(frozen=True)
@@ -40,7 +42,18 @@ def normalize_text(s: str) -> str:
     return s
 
 
-def extract_pdf_text_per_page(*, doc_id: str, pdf_path: Path) -> ExtractedText:
+def _render_page_png_bytes(page: fitz.Page, dpi: int) -> bytes:
+    """
+    Convert pdf page to image bytes
+        dpi - desired dots per inch
+    """
+    pix = page.get_pixmap(dpi=dpi)
+
+    return pix.tobytes("png")
+
+
+def extract_pdf_text_per_page(*, doc_id: str, pdf_path: Path, ocr_fallback: bool) -> ExtractedText:
+
     # Open PDF
     try:
         doc = fitz.open(str(pdf_path))
@@ -56,27 +69,47 @@ def extract_pdf_text_per_page(*, doc_id: str, pdf_path: Path) -> ExtractedText:
             raise ValueError("ENCRYPTED_PDF")
 
     page_count = doc.page_count
-    if page_count > settings.MAX_PDF_PAGES:
+    if page_count > settings.MAX_PDF_PAGES or page_count > settings.MAX_OCR_PAGES:
         doc.close()
         raise ValueError("PDF_TOO_MANY_PAGES")
 
     pages: list[PageText] = []
     for i in range(page_count):
         page = doc.load_page(i)
+
         raw = page.get_text("text")
         text = normalize_text(raw)
         char_count = len(text)
         is_empty = char_count < settings.TEXT_EMPTY_MIN_CHARS
 
-        pages.append(
-            PageText(
-                page=i + 1,
-                text=text,
-                char_count=char_count,
-                is_empty=is_empty,
-                source="pymupdf",
+        # check if page content size is not enough by my heuristic
+        # than I need to convert PDF -> IMG, and use OCR
+        if is_empty and ocr_fallback:
+            png_bytes = _render_page_png_bytes(page, dpi=settings.OCR_DPI)
+            ocr = ocr_image_bytes(png_bytes)
+            ocr_text = normalize_text(ocr.text)
+
+            pages.append(
+                PageText(
+                    page=i + 1,
+                    text=ocr_text,
+                    char_count=len(ocr_text),
+                    is_empty=len(ocr_text) < settings.TEXT_EMPTY_MIN_CHARS,
+                    source="easyocr",
+                    confidence=ocr.confidence,
+                )
             )
-        )
+        else:
+            pages.append(
+                PageText(
+                    page=i + 1,
+                    text=text,
+                    char_count=char_count,
+                    is_empty=is_empty,
+                    source="pymupdf",
+                    confidence=None,
+                )
+            )
 
     doc.close()
 
@@ -97,6 +130,7 @@ def save_text_json(extracted: ExtractedText) -> Path:
                 "char_count": p.char_count,
                 "is_empty": p.is_empty,
                 "source": p.source,
+                "confidence": p.confidence,
             }
             for p in extracted.pages
         ],

@@ -28,5 +28,14 @@ class Settings(BaseSettings):
     MAX_PDF_PAGES: int = 250
     TEXT_EMPTY_MIN_CHARS: int = 20  # heuristic: < 20 chars extracted
 
+    # OCR
+    EASYOCR_LANGS: tuple[str, ...] = ("en",)
+    EASYOCR_GPU: bool = False
+
+    OCR_FALLBACK_ENABLED: bool = True
+    OCR_DPI: int = 200
+    MAX_OCR_PAGES: int = 250
+    MAX_IMAGE_PIXELS: int = 20000000
+
 
 settings = Settings()
