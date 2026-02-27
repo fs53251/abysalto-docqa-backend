@@ -37,5 +37,11 @@ class Settings(BaseSettings):
     MAX_OCR_PAGES: int = 250
     MAX_IMAGE_PIXELS: int = 20000000
 
+    # Chunking
+    CHUNK_SIZE_CHARS: int = 1000
+    CHUNK_OVERLAP_CHARS: int = 200
+    MAX_CHUNKS_PER_DOC: int = 5000
+    CHUNK_SEPARATORS: tuple[str, ...] = ("\n\n", "\n", ". ", " ", "")
+
 
 settings = Settings()
