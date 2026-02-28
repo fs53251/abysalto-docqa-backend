@@ -43,5 +43,11 @@ class Settings(BaseSettings):
     MAX_CHUNKS_PER_DOC: int = 5000
     CHUNK_SEPARATORS: tuple[str, ...] = ("\n\n", "\n", ". ", " ", "")
 
+    # Embedding
+    EMBEDDING_MODEL_NAME: str = "sentence-transformer/all-MiniLM-L6-v2"
+    EMBEDDING_BATCH_SIZE: int = 64
+    EMBEDDING_NORMALIZE: bool = True
+    MAX_CHUNKS_TO_EMBED: int = 5000
+
 
 settings = Settings()
