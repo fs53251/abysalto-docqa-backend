@@ -6,7 +6,7 @@ authors = ["Filip Šiktar <filip.siktar@fer.hr>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.12"
+python = ">=3.12,<3.15"
 fastapi = "^0.133.0"
 uvicorn = "^0.41.0"
 pydantic-settings = "^2.13.1"
@@ -17,6 +17,7 @@ opencv-python-headless = "^4.13.0.92"
 pillow = "^12.1.1"
 numpy = "^2.4.2"
 sentence-transformers = "^5.2.3"
+faiss-cpu = "^1.13.2"
 
 
 [tool.poetry.group.dev.dependencies]
@@ -32,6 +33,11 @@ build-backend = "poetry.core.masonry.api"
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+filterwarnings = [
+  "ignore:builtin type SwigPyPacked has no __module__ attribute:DeprecationWarning",
+  "ignore:builtin type SwigPyObject has no __module__ attribute:DeprecationWarning",
+  "ignore:builtin type swigvarlink has no __module__ attribute:DeprecationWarning",
+]
 
 [tool.black]
 line-length = 100

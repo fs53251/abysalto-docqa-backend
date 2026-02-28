@@ -9,6 +9,7 @@ from app.api.routes.embeddings import router as embeddings_router
 from app.api.routes.extract import router as extract_router
 from app.api.routes.health import router as health_router
 from app.api.routes.upload import router as upload_router
+from app.api.routes.vectorstore import router as vectorstore_router
 from app.core.config import settings
 from app.core.logging import setup_logging
 from app.services.indexing.embedding_service import default_embedding_service
@@ -33,6 +34,7 @@ app.include_router(upload_router)
 app.include_router(extract_router)
 app.include_router(chunk_router)
 app.include_router(embeddings_router)
+app.include_router(vectorstore_router)
 
 
 @app.exception_handler(Exception)
