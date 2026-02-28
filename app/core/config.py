@@ -49,5 +49,9 @@ class Settings(BaseSettings):
     EMBEDDING_NORMALIZE: bool = True
     MAX_CHUNKS_TO_EMBED: int = 5000
 
+    # FAISS / Retrieval
+    DEFAULT_TOP_K: int = 5
+    MAX_TOP_K: int = 20
+
 
 settings = Settings()
