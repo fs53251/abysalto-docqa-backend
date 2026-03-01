@@ -21,7 +21,7 @@ else
   rm -rf data/uploads/* data/processed/* || true
   mkdir -p data/uploads data/processed
   touch data/uploads/.gitkeep data/processed/.gitkeep
-  rm -f .env || true
+  #rm -f .env || true
 fi
 
 # 2) Lint + auto-fix

@@ -82,6 +82,14 @@ def ask(request: Request, body: AskRequest) -> AskResponse:
         qa=qa_svc,
     )
 
+    ner_svc = getattr(request.app.state, "ner_service", None)
+    entities = []
+    if ner_svc is not None:
+        try:
+            entities = ner_svc.extract_entities(res.answer, res.sources)
+        except Exception:
+            entities = []
+
     sources: list[AskSource] = [
         AskSource(
             doc_id=s.doc_id,
@@ -97,5 +105,5 @@ def ask(request: Request, body: AskRequest) -> AskResponse:
         answer=res.answer,
         confidence=res.confidence,
         sources=sources,
-        entities=[],
+        entities=entities,
     )

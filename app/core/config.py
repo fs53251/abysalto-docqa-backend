@@ -62,5 +62,9 @@ class Settings(BaseSettings):
 
     HF_TOKEN: str | None = None
 
+    # NER
+    NER_MODEL_NAME: str = "en_core_web_sm"
+    MAX_ENTITIES: int = 50
+
 
 settings = Settings()

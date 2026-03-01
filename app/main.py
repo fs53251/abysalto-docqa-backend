@@ -15,6 +15,7 @@ from app.api.routes.vectorstore import router as vectorstore_router
 from app.core.config import settings
 from app.core.logging import setup_logging
 from app.services.indexing.embedding_service import default_embedding_service
+from app.services.ner.ner_service import default_ner_service
 from app.services.qa.qa_service import default_qa_service
 
 setup_logging()
@@ -47,6 +48,16 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         app.state.qa_service = None
         logger.exception("QA model load failed (service disabled): %s", e)
+
+    # Initialize NER model (fail-soft)
+    try:
+        ner = default_ner_service()
+        ner.load()
+        app.state.ner_service = ner
+        logger.info("NER service loaded: %s", ner.model_name)
+    except Exception as e:
+        app.state.ner_service = None
+        logger.exception("NER model load failed (NER disabled): %s", e)
 
     yield
 
