@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     CHUNK_SEPARATORS: tuple[str, ...] = ("\n\n", "\n", ". ", " ", "")
 
     # Embedding
-    EMBEDDING_MODEL_NAME: str = "sentence-transformer/all-MiniLM-L6-v2"
+    EMBEDDING_MODEL_NAME: str = "sentence-transformers/all-MiniLM-L6-v2"
     EMBEDDING_BATCH_SIZE: int = 64
     EMBEDDING_NORMALIZE: bool = True
     MAX_CHUNKS_TO_EMBED: int = 5000
@@ -52,6 +52,15 @@ class Settings(BaseSettings):
     # FAISS / Retrieval
     DEFAULT_TOP_K: int = 5
     MAX_TOP_K: int = 20
+
+    # QA
+    QA_MODEL_NAME: str = "distilbert-base-cased-distilled-squad"
+    QA_MAX_CONTENT_CHARS: int = 4000
+    QA_MIN_SCORE: float = 0.15
+
+    MAX_QUESTION_CHARS: int = 500
+
+    HF_TOKEN: str | None = None
 
 
 settings = Settings()
