@@ -14,6 +14,7 @@ from app.storage.embeddings import get_embeddings_meta_jsonl_path
 
 @dataclass(frozen=True)
 class RetrievedChunk:
+    doc_id: str
     chunk_id: str
     score: float
     page: int | None
@@ -110,6 +111,7 @@ class RetrieverService:
 
             results.append(
                 RetrievedChunk(
+                    doc_id=doc_id,
                     chunk_id=chunk_id,
                     score=score,
                     page=int(ch.get("page")) if ch.get("page") is not None else None,
