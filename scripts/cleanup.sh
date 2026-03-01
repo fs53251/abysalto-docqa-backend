@@ -30,8 +30,8 @@ rm -rf data/uploads/* data/processed/* || true
 mkdir -p data/uploads data/processed
 touch data/uploads/.gitkeep data/processed/.gitkeep
 
-echo "==> Removing local secrets file (.env)..."
-rm -f .env || true
+#echo "==> Removing local secrets file (.env)..."
+#rm -f .env || true
 
 echo "==> Done."
 echo "Tip: run 'git status' to verify only intended changes remain."

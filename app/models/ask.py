@@ -1,5 +1,7 @@
 from pydantic import BaseModel, Field
 
+from app.models.ner import Entity
+
 
 class AskRequest(BaseModel):
     question: str = Field(..., min_length=1)
@@ -20,4 +22,4 @@ class AskResponse(BaseModel):
     answer: str
     confidence: float | None
     sources: list[AskSource]
-    entities: list[dict]
+    entities: list[Entity]

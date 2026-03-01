@@ -19,9 +19,26 @@ class DummyQAService:
         return R()
 
 
+class DummyNerService:
+    def extract_entities(self, answer, sources):
+        return [
+            {
+                "text": "John Doe",
+                "label": "PERSON",
+                "start": 0,
+                "end": 8,
+                "source": "answer",
+                "doc_id": None,
+                "page": None,
+                "chunk_id": None,
+            }
+        ]
+
+
 def test_ask_returns_answer_and_sources(monkeypatch):
     client.app.state.embedding_service = DummyEmbeddingService()
     client.app.state.qa_service = DummyQAService()
+    client.app.state.ner_service = DummyNerService()
 
     import app.api.routes.ask as ask_route
     import app.services.retrieval.retriever as retr_mod
@@ -52,3 +69,5 @@ def test_ask_returns_answer_and_sources(monkeypatch):
     assert len(data["sources"]) == 1
     assert data["sources"][0]["doc_id"] == "a" * 32
     assert data["sources"][0]["chunk_id"] == "chunk_1"
+    assert len(data["entities"]) == 1
+    assert data["entities"][0]["text"] == "John Doe"
