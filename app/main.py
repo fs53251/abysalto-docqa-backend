@@ -2,8 +2,9 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.routes.ask import router as ask_router
 from app.api.routes.chunk import router as chunk_router
@@ -13,7 +14,13 @@ from app.api.routes.health import router as health_router
 from app.api.routes.upload import router as upload_router
 from app.api.routes.vectorstore import router as vectorstore_router
 from app.core.config import settings
+from app.core.exception_handlers import (
+    http_exception_handler,
+    unhandled_exception_handler,
+    validation_exception_handler,
+)
 from app.core.logging import setup_logging
+from app.core.middleware.request_id import RequestIdMiddleware
 from app.services.cache.redis_cache import RedisCache
 from app.services.indexing.embedding_service import default_embedding_service
 from app.services.ner.ner_service import default_ner_service
@@ -78,6 +85,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title=settings.APP_NAME, lifespan=lifespan)
 
+# Middlewares
+app.add_middleware(RequestIdMiddleware)
+
+# Routes
 app.include_router(health_router)
 app.include_router(upload_router)
 app.include_router(extract_router)
@@ -86,9 +97,7 @@ app.include_router(embeddings_router)
 app.include_router(vectorstore_router)
 app.include_router(ask_router)
 
-
-@app.exception_handler(Exception)
-async def unhandled_exception_handler(request: Request, exc: Exception):
-    logger.exception("Unhandled error", extra={"path": request.url.path})
-
-    return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
+# Std error responses
+app.add_exception_handler(StarletteHTTPException, http_exception_handler)
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
+app.add_exception_handler(Exception, unhandled_exception_handler)
