@@ -14,6 +14,7 @@ from app.api.routes.upload import router as upload_router
 from app.api.routes.vectorstore import router as vectorstore_router
 from app.core.config import settings
 from app.core.logging import setup_logging
+from app.services.cache.redis_cache import RedisCache
 from app.services.indexing.embedding_service import default_embedding_service
 from app.services.ner.ner_service import default_ner_service
 from app.services.qa.qa_service import default_qa_service
@@ -58,6 +59,19 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         app.state.ner_service = None
         logger.exception("NER model load failed (NER disabled): %s", e)
+
+    # Initialize Caching Redis
+    try:
+        if settings.ENABLE_CACHE and settings.REDIS_URL:
+            r = RedisCache.connect(settings.REDIS_URL)
+            r.ping()
+            app.state.cache = RedisCache(r)
+            logger.info("Redis cache enabled: %s", settings.REDIS_URL)
+        else:
+            app.state.cache = None
+    except Exception as e:
+        app.state.cache = None
+        logger.exception("Redis cache init failed (cache disabled): %s", e)
 
     yield
 

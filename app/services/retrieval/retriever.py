@@ -77,7 +77,10 @@ class RetrieverService:
     def __init__(self, embedding_service):
         self.embedding_service = embedding_service
 
-    def search(self, doc_id: str, query: str, top_k: int) -> list[RetrievedChunk]:
+    def search(
+        self, doc_id: str, query: str, top_k: int, query_emb: np.ndarray | None = None
+    ) -> list[RetrievedChunk]:
+
         if not query or not query.strip():
             return []
 
@@ -90,7 +93,11 @@ class RetrieverService:
         row_to_id = _load_row_to_chunk_id(doc_id)
         chunk_map = _load_chunk_text_map(doc_id)
 
-        q_emb: np.ndarray = self.embedding_service.encode_texts([query])  # (1, D)
+        if query_emb is None:
+            q_emb: np.ndarray = self.embedding_service.encode_texts([query])  # (1, D)
+        else:
+            q_emb = query_emb
+
         scores, idx = search_index(index, q_emb, top_k)
 
         results: list[RetrievedChunk] = []
