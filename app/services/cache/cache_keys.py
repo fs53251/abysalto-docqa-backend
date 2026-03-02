@@ -41,10 +41,14 @@ def sha256_hex(s: str) -> str:
 
 def qemb_key(question: str) -> str:
     qn = normalize_question(question)
-    return f"qemb:{settings.EMBEDDING_MODEL_NAME}:{_chunking_version()}:{sha256_hex(qn)}"
+    return (
+        f"qemb:{settings.EMBEDDING_MODEL_NAME}:{_chunking_version()}:{sha256_hex(qn)}"
+    )
 
 
-def retr_key(scope: str, index_version: str, doc_id: str, question: str, top_k: int) -> str:
+def retr_key(
+    scope: str, index_version: str, doc_id: str, question: str, top_k: int
+) -> str:
     qn = normalize_question(question)
     return f"retr:{scope}:{index_version}:{doc_id}:{sha256_hex(qn)}:{top_k}"
 

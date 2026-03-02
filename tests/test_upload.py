@@ -10,7 +10,10 @@ client = TestClient(app)
 
 def test_upload_multiple_ok(temp_data_dir: Path):
     files = [
-        ("files", ("test.pdf", BytesIO(b"%PDF-1.4 fake pdf content"), "application/pdf")),
+        (
+            "files",
+            ("test.pdf", BytesIO(b"%PDF-1.4 fake pdf content"), "application/pdf"),
+        ),
         ("files", ("image.png", BytesIO(b"\x89PNG\r\n\x1a\nfake"), "image/png")),
     ]
 
@@ -85,7 +88,12 @@ def test_upload_rejects_too_large_file(temp_data_dir: Path, monkeypatch):
 
 
 def test_upload_sanitizes_filename_no_path_traversal(temp_data_dir: Path):
-    files = [("files", ("../../etc/passwd.pdf", BytesIO(b"%PDF-1.4 fake"), "application/pdf"))]
+    files = [
+        (
+            "files",
+            ("../../etc/passwd.pdf", BytesIO(b"%PDF-1.4 fake"), "application/pdf"),
+        )
+    ]
     r = client.post("/upload", files=files)
     assert r.status_code == 200, r.text
     data = r.json()

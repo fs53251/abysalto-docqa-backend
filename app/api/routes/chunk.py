@@ -41,7 +41,9 @@ def chunk_document(doc_id: str, force: bool = Query(False)) -> ChunkBuildRespons
     try:
         chunks, chunk_map = build_chunks_for_doc(doc_id)
     except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="text.json not found. Run extraction first.")
+        raise HTTPException(
+            status_code=404, detail="text.json not found. Run extraction first."
+        )
     except ValueError as e:
         if str(e) == "TOO_MANY_CHUNKS":
             raise HTTPException(

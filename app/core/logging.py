@@ -18,7 +18,7 @@ def setup_logging() -> None:
 
     def record_factory(*args, **kwargs):
         record = old_factory(*args, **kwargs)
-    
+
         if not hasattr(record, "request_id"):
             record.request_id = get_request_id()
         if not hasattr(record, "identity"):

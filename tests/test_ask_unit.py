@@ -70,7 +70,9 @@ def test_ask_returns_answer_and_sources(monkeypatch):
 
     monkeypatch.setattr(retr_mod.RetrieverService, "search", fake_search)
 
-    r = client.post("/ask", json={"question": "What is it?", "scope": "all", "top_k": 1})
+    r = client.post(
+        "/ask", json={"question": "What is it?", "scope": "all", "top_k": 1}
+    )
     assert r.status_code == 200, r.text
     data = r.json()
     assert data["answer"] == "MOCK ANSWER"

@@ -33,7 +33,11 @@ def extract_text(
     if out_path.exists() and not force:
         return JSONResponse(
             status_code=200,
-            content={"doc_id": doc_id, "status": "already_extracted", "text_path": str(out_path)},
+            content={
+                "doc_id": doc_id,
+                "status": "already_extracted",
+                "text_path": str(out_path),
+            },
         )
 
     try:
@@ -61,12 +65,16 @@ def extract_text(
             if msg.startswith("INVALID_PDF"):
                 raise HTTPException(status_code=400, detail="Invalid or corrupted PDF.")
             if msg == "ENCRYPTED_PDF":
-                raise HTTPException(status_code=400, detail="Encrypted PDF is not supported.")
+                raise HTTPException(
+                    status_code=400, detail="Encrypted PDF is not supported."
+                )
             if msg == "PDF_TOO_MANY_PAGES":
                 raise HTTPException(
                     status_code=413, detail="PDF exceeds maximum allowed page count."
                 )
-            raise HTTPException(status_code=500, detail="Extraction failed unexpectedly.")
+            raise HTTPException(
+                status_code=500, detail="Extraction failed unexpectedly."
+            )
 
         return JSONResponse(
             status_code=200,
@@ -87,7 +95,9 @@ def extract_text(
         except ValueError as e:
             msg = str(e)
             if msg == "IMAGE_TOO_LARGE":
-                raise HTTPException(status_code=413, detail="Image too large to OCR safely.")
+                raise HTTPException(
+                    status_code=413, detail="Image too large to OCR safely."
+                )
             raise HTTPException(status_code=500, detail="OCR failed unexpectedly.")
 
         return JSONResponse(
@@ -101,7 +111,9 @@ def extract_text(
             },
         )
 
-    raise HTTPException(status_code=400, detail="Unsupported content type for extraction.")
+    raise HTTPException(
+        status_code=400, detail="Unsupported content type for extraction."
+    )
 
 
 @router.get("/documents/{doc_id}/text")

@@ -123,7 +123,9 @@ class RetrieverService:
                     score=score,
                     page=int(ch.get("page")) if ch.get("page") is not None else None,
                     chunk_index=(
-                        int(ch.get("chunk_index")) if ch.get("chunk_index") is not None else None
+                        int(ch.get("chunk_index"))
+                        if ch.get("chunk_index") is not None
+                        else None
                     ),
                     text_snippet=snippet,
                 )

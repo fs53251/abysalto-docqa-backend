@@ -13,7 +13,9 @@ def write_text_json(temp_data_dir: Path, doc_id: str, pages: list[dict]):
     processed.mkdir(parents=True, exist_ok=True)
     p = processed / "text.json"
     p.write_text(
-        json.dumps({"doc_id": doc_id, "page_count": len(pages), "pages": pages}, indent=2),
+        json.dumps(
+            {"doc_id": doc_id, "page_count": len(pages), "pages": pages}, indent=2
+        ),
         encoding="utf-8",
     )
     return p

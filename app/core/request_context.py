@@ -8,20 +8,28 @@ from __future__ import annotations
 
 import contextvars
 
-request_id_var: contextvars.ContextVar[str] = contextvars.ContextVar("request_id", default = "-")
-identity_var: contextvars.ContextVar[str] = contextvars.ContextVar("identity", default = "-")
+request_id_var: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "request_id", default="-"
+)
+identity_var: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "identity", default="-"
+)
+
 
 def get_request_id() -> str:
     return request_id_var.get()
 
+
 def set_request_id(value: str) -> None:
     request_id_var.set(value)
+
 
 def get_identity() -> str:
     """
     Returns user/session identity when available.
     """
     return identity_var.get()
+
 
 def set_identity(value: str) -> None:
     identity_var.set(value)

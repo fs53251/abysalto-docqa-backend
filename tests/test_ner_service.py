@@ -83,7 +83,9 @@ def test_ner_extracts_from_answer_and_chunks_and_dedupes(monkeypatch):
 
     # verify answer provenance is empty doc/page/chunk
     ans_ents = [e for e in ents if e.source == "answer"]
-    assert all(e.doc_id is None and e.page is None and e.chunk_id is None for e in ans_ents)
+    assert all(
+        e.doc_id is None and e.page is None and e.chunk_id is None for e in ans_ents
+    )
 
     # Dedup rule: same text+label+source+chunk_id -> unique
     # We allow same text/label across different chunk_ids (useful for provenance)

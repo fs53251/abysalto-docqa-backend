@@ -55,7 +55,9 @@ def test_embed_endpoint_creates_embeddings_files(temp_data_dir: Path, monkeypatc
             out[i, 0] = float(i)
         return out
 
-    monkeypatch.setattr(client.app.state.embedding_service, "encode_texts", fake_encode_texts)
+    monkeypatch.setattr(
+        client.app.state.embedding_service, "encode_texts", fake_encode_texts
+    )
 
     r = client.post(f"/documents/{doc_id}/embed")
     assert r.status_code == 200, r.text

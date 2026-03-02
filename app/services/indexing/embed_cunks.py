@@ -118,7 +118,11 @@ def embed_document_chunks(doc_id: str, svc: EmbeddingService) -> EmbedResult:
 
             row_count += len(batch)
 
-    matrix = np.vstack(rows).astype(np.float32) if rows else np.zeros((0, 0), dtype=np.float32)
+    matrix = (
+        np.vstack(rows).astype(np.float32)
+        if rows
+        else np.zeros((0, 0), dtype=np.float32)
+    )
     np.save(npy_path, matrix)
 
     info = {

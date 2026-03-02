@@ -21,6 +21,7 @@ from app.core.exception_handlers import (
 )
 from app.core.logging import setup_logging
 from app.core.middleware.request_id import RequestIdMiddleware
+from app.db.session import init_db_dev_failsafe
 from app.services.cache.redis_cache import RedisCache
 from app.services.indexing.embedding_service import default_embedding_service
 from app.services.ner.ner_service import default_ner_service
@@ -36,6 +37,15 @@ async def lifespan(app: FastAPI):
     if settings.HF_TOKEN:
         os.environ["HF_TOKEN"] = settings.HF_TOKEN
         os.environ["HUGGINGFACEHUB_API_TOKEN"] = settings.HF_TOKEN
+
+    # DB init
+    try:
+        init_db_dev_failsafe()
+        logger.info(
+            "DB init ok (env=%s, url=%s)", settings.APP_ENV, settings.DATABASE_URL
+        )
+    except Exception as e:
+        logger.exception("DB init failed: %s", e)
 
     # Initialize embedding model singleton once (fail-soft)
     try:

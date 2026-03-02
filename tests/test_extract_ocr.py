@@ -98,7 +98,9 @@ def test_image_extract_calls_mocked_route_function(temp_data_dir: Path, monkeypa
         )
         return p
 
-    monkeypatch.setattr(extract_route, "save_image_text_json", fake_save_image_text_json)
+    monkeypatch.setattr(
+        extract_route, "save_image_text_json", fake_save_image_text_json
+    )
 
     r2 = client.post(f"/documents/{doc_id}/extract-text")
     assert r2.status_code == 200, r2.text
