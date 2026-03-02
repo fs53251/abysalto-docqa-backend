@@ -66,5 +66,14 @@ class Settings(BaseSettings):
     NER_MODEL_NAME: str = "en_core_web_sm"
     MAX_ENTITIES: int = 50
 
+    # Redis / Cache
+    REDIS_URL: str = "redis://localhost:6379/0"
+    CACHE_TTL_SECONDS: int = 3600
+    ENABLE_CACHE: bool = True
+
+    # Semantic cache
+    ENABLE_SEMANTIC_CACHE: bool = True
+    SEMANTIC_CACHE_THRESHOLD: float = 0.75
+
 
 settings = Settings()

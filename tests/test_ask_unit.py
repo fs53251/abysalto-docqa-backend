@@ -37,6 +37,15 @@ class DummyNerService:
 
 def test_ask_returns_answer_and_sources(monkeypatch):
     client.app.state.embedding_service = DummyEmbeddingService()
+
+    import numpy as np
+
+    monkeypatch.setattr(
+        client.app.state.embedding_service,
+        "encode_texts",
+        lambda texts: np.array([[1.0, 0.0, 0.0]], dtype=np.float32),
+    )
+
     client.app.state.qa_service = DummyQAService()
     client.app.state.ner_service = DummyNerService()
 
@@ -47,7 +56,7 @@ def test_ask_returns_answer_and_sources(monkeypatch):
     monkeypatch.setattr(ask_route, "list_indexed_docs", lambda _: ["a" * 32])
     monkeypatch.setattr(ask_route, "validate_doc_ids", lambda ids: ids)
 
-    def fake_search(self, doc_id, query, top_k):
+    def fake_search(self, doc_id, query, top_k, query_emb=None):
         return [
             RetrievedChunk(
                 doc_id=doc_id,

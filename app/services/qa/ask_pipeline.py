@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 from app.core.config import settings
 from app.services.qa.qa_service import QaResult, QAService
-from app.services.retrieval.retriever import RetrievedChunk, RetrieverService
+from app.services.retrieval.retriever import RetrievedChunk
 
 WS_RE = re.compile(r"\s+")
 
@@ -48,50 +48,19 @@ def build_context(sources: list[RetrievedChunk]) -> str:
     return "\n".join(parts).strip()
 
 
-def retrieve_multi_doc(
-    *,
-    question: str,
-    doc_ids: list[str],
-    top_k: int,
-    retriever: RetrieverService,
-) -> list[RetrievedChunk]:
-    """
-    Retrieve per-doc, then merge globally by score.
-    Keeps doc_id inside each RetrievedChunk
-    """
-    if top_k < 1:
-        top_k = 1
-    if top_k > settings.MAX_TOP_K:
-        top_k = settings.MAX_TOP_K
-
-    per_doc_k = max(1, min(top_k, settings.MAX_TOP_K))
-    merged: list[RetrievedChunk] = []
-
-    for did in doc_ids:
-        hits = retriever.search(doc_id=did, query=question, top_k=per_doc_k)
-        merged.extend(hits)
-
-    merged_sorted = sorted(merged, key=lambda h: h.score, reverse=True)
-
-    return merged_sorted[:top_k]
-
-
-def ask_over_docs(
-    *,
-    question: str,
-    doc_ids: list[str],
-    top_k: int,
-    retriever: RetrieverService,
-    qa: QAService,
+def answer_with_sources(
+    *, question: str, sources: list[RetrievedChunk], qa: QAService
 ) -> AskPipelineResult:
+    """
+    QA over already-retrieved sources
+    """
     q = clean_question(question)
+
     if not q:
         return AskPipelineResult(answer="", confidence=None, sources=[])
 
     if len(q) > settings.MAX_QUESTION_CHARS:
         q = q[: settings.MAX_QUESTION_CHARS]
-
-    sources = retrieve_multi_doc(question=q, doc_ids=doc_ids, top_k=top_k, retriever=retriever)
 
     ctx = build_context(sources)
     ctx = truncate_context(ctx, settings.QA_MAX_CONTENT_CHARS)

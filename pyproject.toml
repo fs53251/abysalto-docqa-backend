@@ -20,6 +20,7 @@ sentence-transformers = "^5.2.3"
 faiss-cpu = "^1.13.2"
 transformers = "^5.2.0"
 spacy = "^3.8.11"
+redis = "^7.2.1"
 
 
 [tool.poetry.group.dev.dependencies]
