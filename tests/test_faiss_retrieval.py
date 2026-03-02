@@ -63,13 +63,25 @@ def write_chunks_and_embeddings(temp_data_dir: Path, doc_id: str):
     with meta_path.open("w", encoding="utf-8") as f:
         f.write(
             json.dumps(
-                {"row": 0, "chunk_id": "chunk_a", "doc_id": doc_id, "page": 1, "chunk_index": 0}
+                {
+                    "row": 0,
+                    "chunk_id": "chunk_a",
+                    "doc_id": doc_id,
+                    "page": 1,
+                    "chunk_index": 0,
+                }
             )
             + "\n"
         )
         f.write(
             json.dumps(
-                {"row": 1, "chunk_id": "chunk_b", "doc_id": doc_id, "page": 2, "chunk_index": 1}
+                {
+                    "row": 1,
+                    "chunk_id": "chunk_b",
+                    "doc_id": doc_id,
+                    "page": 2,
+                    "chunk_index": 1,
+                }
             )
             + "\n"
         )
@@ -92,7 +104,9 @@ def write_chunks_and_embeddings(temp_data_dir: Path, doc_id: str):
     )
 
 
-def test_build_index_and_search_returns_expected_chunk(temp_data_dir: Path, monkeypatch):
+def test_build_index_and_search_returns_expected_chunk(
+    temp_data_dir: Path, monkeypatch
+):
     doc_id = "f" * 32
     write_chunks_and_embeddings(temp_data_dir, doc_id)
 
@@ -103,7 +117,9 @@ def test_build_index_and_search_returns_expected_chunk(temp_data_dir: Path, monk
     def fake_encode_texts(texts):
         return np.array([[1.0, 0.0, 0.0]], dtype=np.float32)
 
-    monkeypatch.setattr(client.app.state.embedding_service, "encode_texts", fake_encode_texts)
+    monkeypatch.setattr(
+        client.app.state.embedding_service, "encode_texts", fake_encode_texts
+    )
 
     # Build index
     r1 = client.post(f"/documents/{doc_id}/index")
@@ -111,7 +127,9 @@ def test_build_index_and_search_returns_expected_chunk(temp_data_dir: Path, monk
     assert r1.json()["status"] in ("indexed", "already_indexed")
 
     # Search
-    r2 = client.post(f"/documents/{doc_id}/search", json={"query": "invoice", "top_k": 1})
+    r2 = client.post(
+        f"/documents/{doc_id}/search", json={"query": "invoice", "top_k": 1}
+    )
     assert r2.status_code == 200, r2.text
     hits = r2.json()["hits"]
     assert len(hits) == 1

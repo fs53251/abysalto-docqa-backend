@@ -116,7 +116,9 @@ def ask(request: Request, body: AskRequest) -> AskResponse:
 
     if body.scope == "docs":
         if not body.doc_ids:
-            raise HTTPException(status_code=400, detail="doc_ids required when scope='docs'.")
+            raise HTTPException(
+                status_code=400, detail="doc_ids required when scope='docs'."
+            )
         doc_ids = body.doc_ids
     else:
         doc_ids = list_indexed_docs(settings.DATA_DIR)
@@ -136,7 +138,9 @@ def ask(request: Request, body: AskRequest) -> AskResponse:
             status_code=503, detail="Embedding service unavailable (model not loaded)."
         )
     if qa_svc is None:
-        raise HTTPException(status_code=503, detail="QA service unavailable (model not loaded).")
+        raise HTTPException(
+            status_code=503, detail="QA service unavailable (model not loaded)."
+        )
 
     ner_svc = getattr(request.app.state, "ner_service", None)
     cache = getattr(request.app.state, "cache", None)
@@ -166,11 +170,18 @@ def ask(request: Request, body: AskRequest) -> AskResponse:
             prev = emb_hit.value.reshape(-1).astype(np.float32)
 
             if cur.shape == prev.shape:
-                sim = float(np.dot(cur, prev) / (np.linalg.norm(cur) * np.linalg.norm(prev) + 1e-8))
+                sim = float(
+                    np.dot(cur, prev)
+                    / (np.linalg.norm(cur) * np.linalg.norm(prev) + 1e-8)
+                )
                 if sim >= settings.SEMANTIC_CACHE_THRESHOLD:
                     cache_hit = True
                     dt = (time.perf_counter() - t0) * 1000
-                    logger.info("ask cache_hit=1 layer=semantic sim=%.3f latency_ms=%.2f", sim, dt)
+                    logger.info(
+                        "ask cache_hit=1 layer=semantic sim=%.3f latency_ms=%.2f",
+                        sim,
+                        dt,
+                    )
                     return AskResponse(**resp_hit.value)
 
     # 2) Exact final answer cache
@@ -221,8 +232,12 @@ def ask(request: Request, body: AskRequest) -> AskResponse:
                         )
                     )
             else:
-                hits = retriever.search(doc_id=did, query=qn, top_k=top_k, query_emb=q_emb)
-                cache.set_json(rk, [h.__dict__ for h in hits], settings.CACHE_TTL_SECONDS)
+                hits = retriever.search(
+                    doc_id=did, query=qn, top_k=top_k, query_emb=q_emb
+                )
+                cache.set_json(
+                    rk, [h.__dict__ for h in hits], settings.CACHE_TTL_SECONDS
+                )
                 all_hits.extend(hits)
         else:
             hits = retriever.search(doc_id=did, query=qn, top_k=top_k, query_emb=q_emb)
@@ -271,7 +286,9 @@ def ask(request: Request, body: AskRequest) -> AskResponse:
             mq = mask_entities(qn)
             m_emb = emb_svc.encode_texts([mq])
             cache.set_embedding(mk + ":emb", m_emb, settings.CACHE_TTL_SECONDS)
-            cache.set_json(mk + ":resp", response_obj.model_dump(), settings.CACHE_TTL_SECONDS)
+            cache.set_json(
+                mk + ":resp", response_obj.model_dump(), settings.CACHE_TTL_SECONDS
+            )
 
     dt = (time.perf_counter() - t0) * 1000
     logger.info("ask cache_hit=%d latency_ms=%.2f", 1 if cache_hit else 0, dt)

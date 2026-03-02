@@ -2,7 +2,12 @@ import re
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
-from app.models.retrieval import BuildIndexResponse, SearchHit, SearchRequest, SearchResponse
+from app.models.retrieval import (
+    BuildIndexResponse,
+    SearchHit,
+    SearchRequest,
+    SearchResponse,
+)
 from app.services.indexing.faiss_index import build_faiss_index
 from app.services.retrieval.retriever import RetrieverService
 from app.storage.faiss_store import get_faiss_index_path, get_faiss_meta_path
@@ -43,7 +48,9 @@ def build_index(doc_id: str, force: bool = Query(False)) -> BuildIndexResponse:
     try:
         res = build_faiss_index(doc_id)
     except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="Embeddings not found. Run /embed first.")
+        raise HTTPException(
+            status_code=404, detail="Embeddings not found. Run /embed first."
+        )
     except ValueError:
         raise HTTPException(status_code=400, detail="Failed to build FAISS index.")
 
@@ -66,7 +73,9 @@ def search_doc(request: Request, doc_id: str, body: SearchRequest) -> SearchResp
 
     svc = getattr(request.app.state, "embedding_service", None)
     if svc is None:
-        raise HTTPException(status_code=500, detail="Embedding service not initialized.")
+        raise HTTPException(
+            status_code=500, detail="Embedding service not initialized."
+        )
 
     retriever = RetrieverService(svc)
 
@@ -75,7 +84,9 @@ def search_doc(request: Request, doc_id: str, body: SearchRequest) -> SearchResp
     except FileNotFoundError as e:
         msg = str(e)
         if "FAISS_INDEX_NOT_FOUND" in msg:
-            raise HTTPException(status_code=404, detail="FAISS index not found. Run /index first.")
+            raise HTTPException(
+                status_code=404, detail="FAISS index not found. Run /index first."
+            )
         raise HTTPException(status_code=404, detail="Required artifacts missing.")
     except Exception:
         raise HTTPException(status_code=500, detail="Search failed unexpectedly.")

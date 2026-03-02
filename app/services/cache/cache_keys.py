@@ -17,7 +17,6 @@ RE_NUMBER = re.compile(r"\b\d+(\.\d+)?\b")  # number "43" or "3.24"
 def normalize_question(q: str) -> str:
     q = (q or "").strip()
     q = WS_RE.sub(" ", q)
-
     return q
 
 
@@ -33,7 +32,6 @@ def mask_entities(q: str) -> str:
     q = RE_PERCENT.sub("[PERCENT]", q)
     q = RE_YEAR.sub("[YEAR]", q)
     q = RE_NUMBER.sub("[NUMBER]", q)
-
     return q
 
 
@@ -43,30 +41,27 @@ def sha256_hex(s: str) -> str:
 
 def qemb_key(question: str) -> str:
     qn = normalize_question(question)
+    return (
+        f"qemb:{settings.EMBEDDING_MODEL_NAME}:{_chunking_version()}:{sha256_hex(qn)}"
+    )
 
-    return f"qemb:{settings.EMBEDDING_MODEL_NAME}:{
-        _chunking_version()}:{sha256_hex(qn)}"
 
-
-def retr_key(scope: str, index_version: str, doc_id: str, question: str, top_k: int) -> str:
+def retr_key(
+    scope: str, index_version: str, doc_id: str, question: str, top_k: int
+) -> str:
     qn = normalize_question(question)
-
     return f"retr:{scope}:{index_version}:{doc_id}:{sha256_hex(qn)}:{top_k}"
 
 
 def ans_key(scope: str, pipeline_version: str, question: str, top_k: int) -> str:
     qn = normalize_question(question)
-
-    return f"ans:{scope}:{pipeline_version}:{
-        sha256_hex(qn)}:{top_k}"
+    return f"ans:{scope}:{pipeline_version}:{sha256_hex(qn)}:{top_k}"
 
 
 def sem_key(scope: str, pipeline_version: str, question: str, top_k: int) -> str:
     """
-    Key for semantic chache bucket.
+    Key for semantic cache bucket.
     exact matching is done on masked query
     """
     mq = mask_entities(question)
-
-    return f"sem:{scope}:{pipeline_version}:{
-        sha256_hex(mq)}:{top_k}"
+    return f"sem:{scope}:{pipeline_version}:{sha256_hex(mq)}:{top_k}"

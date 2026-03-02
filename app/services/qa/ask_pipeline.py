@@ -67,11 +67,15 @@ def answer_with_sources(
 
     qa_res: QaResult = qa.answer(q, ctx)
 
-    if not qa_res.answer or (qa_res.score is not None and qa_res.score < settings.QA_MIN_SCORE):
+    if not qa_res.answer or (
+        qa_res.score is not None and qa_res.score < settings.QA_MIN_SCORE
+    ):
         return AskPipelineResult(
             answer="I don't know based on the provided documents.",
             confidence=qa_res.score,
             sources=sources,
         )
 
-    return AskPipelineResult(answer=qa_res.answer, confidence=qa_res.score, sources=sources)
+    return AskPipelineResult(
+        answer=qa_res.answer, confidence=qa_res.score, sources=sources
+    )

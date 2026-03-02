@@ -63,7 +63,9 @@ def _stable_chunk_id(doc_id: str, page: int, chunk_index: int, text: str) -> str
 # LangChain does not provide page, char_start, char_end, source or confidence!!
 
 
-def _recursive_split(text: str | None, max_len: int, seps: tuple[str, ...]) -> list[str]:
+def _recursive_split(
+    text: str | None, max_len: int, seps: tuple[str, ...]
+) -> list[str]:
     """
     Try separators in order.
     If still too long, fall back to hard split.
@@ -247,7 +249,9 @@ def build_chunks_for_doc(doc_id: str) -> tuple[list[Chunk], dict[str, Any]]:
     return all_chunks, chunk_map
 
 
-def save_chunks(doc_id: str, chunks: list[Chunk], chunk_map: dict[str, Any]) -> dict[str, str]:
+def save_chunks(
+    doc_id: str, chunks: list[Chunk], chunk_map: dict[str, Any]
+) -> dict[str, str]:
     """
     Write chunks into 2 documents:
         1. chunks.jsonl
@@ -281,6 +285,8 @@ def save_chunks(doc_id: str, chunks: list[Chunk], chunk_map: dict[str, Any]) -> 
                 )
                 + "\n"
             )
-    map_path.write_text(json.dumps(chunk_map, ensure_ascii=False, indent=2), encoding="utf-8")
+    map_path.write_text(
+        json.dumps(chunk_map, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
     return {"chunks_jsonl": str(chunks_path), "chunk_map": str(map_path)}

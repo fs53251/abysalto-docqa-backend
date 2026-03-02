@@ -72,7 +72,9 @@ class NerService:
 
         return out
 
-    def extract_entities(self, answer: str, sources: list[RetrievedChunk]) -> list[Entity]:
+    def extract_entities(
+        self, answer: str, sources: list[RetrievedChunk]
+    ) -> list[Entity]:
         """
         Extract entities from:
             - final answer (source="answer")

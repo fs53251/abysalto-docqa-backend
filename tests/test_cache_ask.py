@@ -66,10 +66,14 @@ def test_answer_cache_hit(monkeypatch):
 
     monkeypatch.setattr(retr_mod.RetrieverService, "search", fake_search)
 
-    r1 = client.post("/ask", json={"question": "What is it?", "scope": "all", "top_k": 1})
+    r1 = client.post(
+        "/ask", json={"question": "What is it?", "scope": "all", "top_k": 1}
+    )
     assert r1.status_code == 200
     assert r1.json()["answer"] == "ANSWER"
 
-    r2 = client.post("/ask", json={"question": "What is it?", "scope": "all", "top_k": 1})
+    r2 = client.post(
+        "/ask", json={"question": "What is it?", "scope": "all", "top_k": 1}
+    )
     assert r2.status_code == 200
     assert r2.json()["answer"] == "ANSWER"

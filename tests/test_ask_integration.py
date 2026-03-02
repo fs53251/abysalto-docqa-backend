@@ -69,10 +69,22 @@ def write_chunks_and_embeddings(temp_data_dir: Path, doc_id: str):
         "\n".join(
             [
                 json.dumps(
-                    {"row": 0, "chunk_id": "chunk_a", "doc_id": doc_id, "page": 1, "chunk_index": 0}
+                    {
+                        "row": 0,
+                        "chunk_id": "chunk_a",
+                        "doc_id": doc_id,
+                        "page": 1,
+                        "chunk_index": 0,
+                    }
                 ),
                 json.dumps(
-                    {"row": 1, "chunk_id": "chunk_b", "doc_id": doc_id, "page": 2, "chunk_index": 1}
+                    {
+                        "row": 1,
+                        "chunk_id": "chunk_b",
+                        "doc_id": doc_id,
+                        "page": 2,
+                        "chunk_index": 1,
+                    }
                 ),
             ]
         )

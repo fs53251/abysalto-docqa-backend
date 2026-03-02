@@ -55,18 +55,24 @@ def embed_document(
     # use sungleton from app.state (which is loaded once at startup)
     svc = getattr(request.app.state, "embedding_service", None)
     if svc is None:
-        raise HTTPException(status_code=500, detail="Embedding service not initialized.")
+        raise HTTPException(
+            status_code=500, detail="Embedding service not initialized."
+        )
 
     try:
         res = embed_document_chunks(doc_id, svc)
     except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="chunks.jsonl not found. Run chunking first.")
+        raise HTTPException(
+            status_code=404, detail="chunks.jsonl not found. Run chunking first."
+        )
     except ValueError as e:
         if str(e) == "TOO_MANY_CHUNKS_TO_EMBED":
             raise HTTPException(
                 status_code=413, detail="Too many chunks to embed; adjust settings."
             )
-        raise HTTPException(status_code=400, detail="Embedding failed due to invalid input.")
+        raise HTTPException(
+            status_code=400, detail="Embedding failed due to invalid input."
+        )
 
     return EmbedBuildResponse(
         doc_id=res.doc_id,
