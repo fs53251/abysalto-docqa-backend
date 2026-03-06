@@ -36,7 +36,7 @@ class DummyNerService:
         ]
 
 
-def test_ask_returns_answer_and_sources(
+def test_ask_returns_answer_sources_and_filename(
     client: TestClient,
     services,
     temp_data_dir: Path,
@@ -60,7 +60,7 @@ def test_ask_returns_answer_and_sources(
     from app.services.retrieval.retriever import RetrievedChunk
 
     doc_id = uuid.uuid4().hex
-    create_owned_document(client, doc_id=doc_id)
+    create_owned_document(client, doc_id=doc_id, filename="unit-doc.pdf")
     processed = temp_data_dir / "processed" / doc_id
     processed.mkdir(parents=True, exist_ok=True)
     (processed / "faiss.index").write_bytes(b"index")
@@ -84,11 +84,13 @@ def test_ask_returns_answer_and_sources(
         json={"question": "What is it?", "scope": "all", "top_k": 1},
     )
     assert response.status_code == 200, response.text
+
     data = response.json()
     assert data["answer"] == "MOCK ANSWER"
     assert data["confidence"] == 0.9
     assert len(data["sources"]) == 1
     assert data["sources"][0]["doc_id"] == doc_id
+    assert data["sources"][0]["filename"] == "unit-doc.pdf"
     assert data["sources"][0]["chunk_id"] == "chunk_1"
     assert len(data["entities"]) == 1
     assert data["entities"][0]["text"] == "John Doe"

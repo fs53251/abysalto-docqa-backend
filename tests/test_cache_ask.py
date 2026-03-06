@@ -40,7 +40,7 @@ class DummyQA:
         return Result()
 
 
-def test_answer_cache_hit(
+def test_answer_cache_hit_preserves_filename(
     client: TestClient,
     services,
     temp_data_dir: Path,
@@ -56,7 +56,7 @@ def test_answer_cache_hit(
     from app.services.retrieval.retriever import RetrievedChunk
 
     doc_id = uuid.uuid4().hex
-    create_owned_document(client, doc_id=doc_id)
+    create_owned_document(client, doc_id=doc_id, filename="cache-doc.pdf")
     processed = temp_data_dir / "processed" / doc_id
     processed.mkdir(parents=True, exist_ok=True)
     (processed / "faiss.index").write_bytes(b"index")
@@ -81,6 +81,7 @@ def test_answer_cache_hit(
     )
     assert first.status_code == 200
     assert first.json()["answer"] == "ANSWER"
+    assert first.json()["sources"][0]["filename"] == "cache-doc.pdf"
 
     second = client.post(
         "/ask",
@@ -88,3 +89,4 @@ def test_answer_cache_hit(
     )
     assert second.status_code == 200
     assert second.json()["answer"] == "ANSWER"
+    assert second.json()["sources"][0]["filename"] == "cache-doc.pdf"

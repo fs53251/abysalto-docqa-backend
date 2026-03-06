@@ -15,6 +15,22 @@ from app.core.request_context import get_request_id
 logger = logging.getLogger(__name__)
 
 
+def _sanitize_for_json(value: Any) -> Any:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+
+    if isinstance(value, dict):
+        return {str(key): _sanitize_for_json(val) for key, val in value.items()}
+
+    if isinstance(value, (list, tuple, set)):
+        return [_sanitize_for_json(item) for item in value]
+
+    if isinstance(value, BaseException):
+        return str(value)
+
+    return str(value)
+
+
 def _error_response(
     *,
     status_code: int,
@@ -28,14 +44,15 @@ def _error_response(
         "request_id": get_request_id(),
     }
     if settings.APP_ENV != "prod" and details is not None:
-        payload["details"] = details
+        payload["details"] = _sanitize_for_json(details)
+
     return JSONResponse(status_code=status_code, content=payload)
 
 
 async def http_exception_handler(
-    request: Request, exc: StarletteHTTPException
+    request: Request,
+    exc: StarletteHTTPException,
 ) -> JSONResponse:
-    # Maps my implementation of ApiError into standard HTTPException
     if isinstance(exc, ApiError):
         return _error_response(
             status_code=exc.status_code,
@@ -52,7 +69,10 @@ async def http_exception_handler(
     )
 
 
-async def domain_exception_handler(request: Request, exc: DomainError) -> JSONResponse:
+async def domain_exception_handler(
+    request: Request,
+    exc: DomainError,
+) -> JSONResponse:
     api_exc = from_domain_error(exc)
     return _error_response(
         status_code=api_exc.status_code,
@@ -63,9 +83,9 @@ async def domain_exception_handler(request: Request, exc: DomainError) -> JSONRe
 
 
 async def validation_exception_handler(
-    request: Request, exc: RequestValidationError
+    request: Request,
+    exc: RequestValidationError,
 ) -> JSONResponse:
-    # 422 is FastAPI default for validation, but assignment expects 400 for invalid input.
     return _error_response(
         status_code=400,
         error_code="invalid_input",
@@ -74,9 +94,10 @@ async def validation_exception_handler(
     )
 
 
-async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    # Never leak stack traces to clients!!!
-    # I still log server-side!!
+async def unhandled_exception_handler(
+    request: Request,
+    exc: Exception,
+) -> JSONResponse:
     logger.exception(
         "Unhandled error",
         extra={

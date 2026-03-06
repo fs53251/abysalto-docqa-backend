@@ -80,8 +80,8 @@ class Settings(BaseSettings):
     QA_MAX_CONTENT_CHARS: int = 4000
     QA_MIN_SCORE: float = 0.15
 
-    MAX_QUESTION_LEN: int = 500
-    MAX_QUESTION_CHARS: int = Field(default=500, validation_alias="MAX_QUESTION_LEN")
+    MAX_QUESTION_LEN: int = 2000
+    MAX_QUESTION_CHARS: int = Field(default=2000, validation_alias="MAX_QUESTION_LEN")
 
     HF_TOKEN: str | None = None
 
