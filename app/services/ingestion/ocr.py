@@ -7,6 +7,7 @@ import numpy as np
 from PIL import Image
 
 from app.core.config import settings
+from app.core.errors import ExternalDependencyMissing
 
 
 @dataclass(frozen=True)
@@ -16,19 +17,19 @@ class OcrResult:
     lines: int
 
 
-# I've implemented this for optimization, OCR is slow
 @lru_cache(maxsize=1)
 def get_easyocr_reader():
     """
     Singleton EasyOCR Reader.
-    Expensive to have more than one reader!
     """
-    import easyocr
+    try:
+        import easyocr
+    except ModuleNotFoundError as e:  # pragma: no cover
+        raise ExternalDependencyMissing("easyocr") from e
 
     return easyocr.Reader(list(settings.EASYOCR_LANGS), gpu=settings.EASYOCR_GPU)
 
 
-# buffered bytes, in-memory
 def _io_bytes(b: bytes):
     import io
 
@@ -48,25 +49,17 @@ def _safe_pil_open(image_bytes: bytes) -> Image.Image:
 def ocr_image_bytes(image_bytes: bytes) -> OcrResult:
     """
     Runs EasyOCR on an image (bytes).
-
     Returns joined text + avg confidence.
     """
     img = _safe_pil_open(image_bytes)
     arr = np.array(img)
 
-    # fetch singleton reader object
     reader = get_easyocr_reader()
-
-    # EasyOCR returns something like this:
-    # [(bbox, text, conf), ...]
     results = reader.readtext(arr)
 
     texts: list[str] = []
     confs: list[float] = []
 
-    # item[0] -> bbox
-    # item[1] -> text
-    # item[2] -> confidence value
     for item in results:
         text = (item[1] or "").strip()
         conf = float(item[2] if item[2] is not None else None)

@@ -3,12 +3,8 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from app.main import app
 
-client = TestClient(app)
-
-
-def test_upload_multiple_ok(temp_data_dir: Path):
+def test_upload_multiple_ok(client: TestClient, temp_data_dir: Path):
     files = [
         (
             "files",
@@ -32,7 +28,9 @@ def test_upload_multiple_ok(temp_data_dir: Path):
         assert (doc_dir / "original").exists()
 
 
-def test_upload_rejects_wrong_extension_best_effort(temp_data_dir: Path):
+def test_upload_rejects_wrong_extension_best_effort(
+    client: TestClient, temp_data_dir: Path
+):
     files = [
         ("files", ("ok.pdf", BytesIO(b"%PDF-1.4 fake"), "application/pdf")),
         ("files", ("evil.exe", BytesIO(b"nope"), "application/octet-stream")),
@@ -47,7 +45,7 @@ def test_upload_rejects_wrong_extension_best_effort(temp_data_dir: Path):
     assert data["documents"][1]["status"] == "error"
 
 
-def test_upload_rejects_wrong_mime(temp_data_dir: Path):
+def test_upload_rejects_wrong_mime(client: TestClient, temp_data_dir: Path):
     # PDF extension but mime text/plain
     files = [("files", ("test.pdf", BytesIO(b"%PDF-1.4 fake"), "text/plain"))]
     r = client.post("/upload", files=files)
@@ -57,7 +55,7 @@ def test_upload_rejects_wrong_mime(temp_data_dir: Path):
     assert data["documents"][0]["status"] == "error"
 
 
-def test_upload_rejects_magic_bytes_mismatch(temp_data_dir: Path):
+def test_upload_rejects_magic_bytes_mismatch(client: TestClient, temp_data_dir: Path):
     # says pdf but bytes not %PDF
     files = [("files", ("test.pdf", BytesIO(b"NOTPDF"), "application/pdf"))]
     r = client.post("/upload", files=files)
@@ -68,7 +66,9 @@ def test_upload_rejects_magic_bytes_mismatch(temp_data_dir: Path):
     assert "Magic-bytes" in data["documents"][0]["error_detail"]
 
 
-def test_upload_rejects_too_large_file(temp_data_dir: Path, monkeypatch):
+def test_upload_rejects_too_large_file(
+    client: TestClient, temp_data_dir: Path, monkeypatch
+):
     from app.core.config import settings
 
     monkeypatch.setattr(settings, "MAX_UPLOAD_MB", 1)  # 1MB
@@ -87,7 +87,9 @@ def test_upload_rejects_too_large_file(temp_data_dir: Path, monkeypatch):
     assert "max size" in data["documents"][0]["error_detail"].lower()
 
 
-def test_upload_sanitizes_filename_no_path_traversal(temp_data_dir: Path):
+def test_upload_sanitizes_filename_no_path_traversal(
+    client: TestClient, temp_data_dir: Path
+):
     files = [
         (
             "files",

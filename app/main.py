@@ -15,19 +15,17 @@ from app.api.routes.upload import router as upload_router
 from app.api.routes.vectorstore import router as vectorstore_router
 from app.core.config import settings
 from app.core.exception_handlers import (
+    domain_exception_handler,
     http_exception_handler,
     unhandled_exception_handler,
     validation_exception_handler,
 )
-from app.core.logging import setup_logging
+from app.core.errors import DomainError
+from app.core.logging import configure_logging
 from app.core.middleware.request_id import RequestIdMiddleware
-from app.db.session import init_db_dev_failsafe
-from app.services.cache.redis_cache import RedisCache
-from app.services.indexing.embedding_service import default_embedding_service
-from app.services.ner.ner_service import default_ner_service
-from app.services.qa.qa_service import default_qa_service
+from app.services.factories import init_app_services
 
-setup_logging()
+configure_logging()
 logger = logging.getLogger(__name__)
 
 
@@ -38,8 +36,10 @@ async def lifespan(app: FastAPI):
         os.environ["HF_TOKEN"] = settings.HF_TOKEN
         os.environ["HUGGINGFACEHUB_API_TOKEN"] = settings.HF_TOKEN
 
-    # DB init
+    # DB init (fail-soft)
     try:
+        from app.db.session import init_db_dev_failsafe
+
         init_db_dev_failsafe()
         logger.info(
             "DB init ok (env=%s, url=%s)", settings.APP_ENV, settings.DATABASE_URL
@@ -47,48 +47,8 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.exception("DB init failed: %s", e)
 
-    # Initialize embedding model singleton once (fail-soft)
-    try:
-        svc = default_embedding_service()
-        svc.load()
-        app.state.embedding_service = svc
-        logger.info("Embedding service loaded: %s", svc.cfg.model_name)
-    except Exception as e:
-        app.state.embedding_service = None
-        logger.exception("Embedding model load failed (service disabled): %s", e)
-
-    # Initialize QA model singleton once (fail-soft)
-    try:
-        qa = default_qa_service()
-        qa.load()
-        app.state.qa_service = qa
-        logger.info("QA service loaded: %s", qa.model_name)
-    except Exception as e:
-        app.state.qa_service = None
-        logger.exception("QA model load failed (service disabled): %s", e)
-
-    # Initialize NER model (fail-soft)
-    try:
-        ner = default_ner_service()
-        ner.load()
-        app.state.ner_service = ner
-        logger.info("NER service loaded: %s", ner.model_name)
-    except Exception as e:
-        app.state.ner_service = None
-        logger.exception("NER model load failed (NER disabled): %s", e)
-
-    # Initialize Caching Redis
-    try:
-        if settings.ENABLE_CACHE and settings.REDIS_URL:
-            r = RedisCache.connect(settings.REDIS_URL)
-            r.ping()
-            app.state.cache = RedisCache(r)
-            logger.info("Redis cache enabled: %s", settings.REDIS_URL)
-        else:
-            app.state.cache = None
-    except Exception as e:
-        app.state.cache = None
-        logger.exception("Redis cache init failed (cache disabled): %s", e)
+    # All services initialization (fail-soft per service)
+    init_app_services(app)
 
     yield
 
@@ -107,7 +67,8 @@ app.include_router(embeddings_router)
 app.include_router(vectorstore_router)
 app.include_router(ask_router)
 
-# Std error responses
+# Exception handlers
 app.add_exception_handler(StarletteHTTPException, http_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
+app.add_exception_handler(DomainError, domain_exception_handler)
 app.add_exception_handler(Exception, unhandled_exception_handler)

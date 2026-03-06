@@ -1,7 +1,8 @@
 import re
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query
 
+from app.core.errors import InvalidInput, NotFound, PayloadTooLarge
 from app.models.chunking import ChunkBuildResponse
 from app.services.indexing.chunking import build_chunks_for_doc, save_chunks
 from app.storage.chunks import get_chunk_map_path, get_chunks_jsonl_path
@@ -13,7 +14,7 @@ DOC_ID_RE = re.compile(r"^[a-f0-9]{16,64}$")
 
 def _validate_doc_id(doc_id: str) -> None:
     if not DOC_ID_RE.match(doc_id):
-        raise HTTPException(status_code=400, detail="Invalid doc_id format.")
+        raise InvalidInput("Invalid doc_id format.")
 
 
 @router.post("/documents/{doc_id}/chunk", response_model=ChunkBuildResponse)
@@ -41,15 +42,11 @@ def chunk_document(doc_id: str, force: bool = Query(False)) -> ChunkBuildRespons
     try:
         chunks, chunk_map = build_chunks_for_doc(doc_id)
     except FileNotFoundError:
-        raise HTTPException(
-            status_code=404, detail="text.json not found. Run extraction first."
-        )
+        raise NotFound("text.json not found. Run extraction first.")
     except ValueError as e:
         if str(e) == "TOO_MANY_CHUNKS":
-            raise HTTPException(
-                status_code=413, detail="Too many chunks generated; adjust settings."
-            )
-        raise HTTPException(status_code=400, detail="Invalid text.json format.")
+            raise PayloadTooLarge("Too many chunks generated; adjust settings.")
+        raise InvalidInput("Invalid text.json format.")
 
     paths = save_chunks(doc_id, chunks, chunk_map)
 

@@ -4,12 +4,10 @@ from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
 
-import fitz
+import pytest
 from fastapi.testclient import TestClient
 
-from app.main import app
-
-client = TestClient(app)
+fitz = pytest.importorskip("fitz")
 
 
 def make_pdf_bytes_empty_page() -> bytes:
@@ -20,7 +18,9 @@ def make_pdf_bytes_empty_page() -> bytes:
     return b
 
 
-def test_pdf_ocr_fallback_used_when_empty(temp_data_dir: Path, monkeypatch):
+def test_pdf_ocr_fallback_used_when_empty(
+    client: TestClient, temp_data_dir: Path, monkeypatch
+):
     # Upload empty PDF (valid)
     pdf_bytes = make_pdf_bytes_empty_page()
     files = [("files", ("empty.pdf", BytesIO(pdf_bytes), "application/pdf"))]
@@ -47,7 +47,9 @@ def test_pdf_ocr_fallback_used_when_empty(temp_data_dir: Path, monkeypatch):
     assert "MOCK OCR" in tj["pages"][0]["text"]
 
 
-def test_image_extract_calls_mocked_route_function(temp_data_dir: Path, monkeypatch):
+def test_image_extract_calls_mocked_route_function(
+    client: TestClient, temp_data_dir: Path, monkeypatch
+):
     # Use a real-looking PNG header to satisfy upload magic check,
     # but we will NOT let OCR/PIL run because we patch route-level function.
     png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 128

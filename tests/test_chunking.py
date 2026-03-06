@@ -3,10 +3,6 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from app.main import app
-
-client = TestClient(app)
-
 
 def write_text_json(temp_data_dir: Path, doc_id: str, pages: list[dict]):
     processed = temp_data_dir / "processed" / doc_id
@@ -21,7 +17,7 @@ def write_text_json(temp_data_dir: Path, doc_id: str, pages: list[dict]):
     return p
 
 
-def test_chunk_endpoint_creates_chunks_and_map(temp_data_dir: Path):
+def test_chunk_endpoint_creates_chunks_and_map(client: TestClient, temp_data_dir: Path):
     doc_id = "a" * 32
     pages = [
         {
@@ -66,7 +62,7 @@ def test_chunk_endpoint_creates_chunks_and_map(temp_data_dir: Path):
     assert len(m["chunks"]) == data["chunk_count"]
 
 
-def test_chunk_endpoint_is_idempotent(temp_data_dir: Path):
+def test_chunk_endpoint_is_idempotent(client: TestClient, temp_data_dir: Path):
     doc_id = "b" * 32
     pages = [
         {
@@ -89,7 +85,7 @@ def test_chunk_endpoint_is_idempotent(temp_data_dir: Path):
     assert data2["chunk_count"] == c1
 
 
-def test_chunk_requires_text_json(temp_data_dir: Path):
+def test_chunk_requires_text_json(client: TestClient, temp_data_dir: Path):
     doc_id = "c" * 32
     r = client.post(f"/documents/{doc_id}/chunk")
     assert r.status_code == 404

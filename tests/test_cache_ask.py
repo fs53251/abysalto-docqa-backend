@@ -1,10 +1,6 @@
 import numpy as np
 from fastapi.testclient import TestClient
 
-from app.main import app
-
-client = TestClient(app)
-
 
 class FakeCache:
     def __init__(self):
@@ -39,11 +35,11 @@ class DummyQA:
         return R()
 
 
-def test_answer_cache_hit(monkeypatch):
-    client.app.state.embedding_service = DummyEmb()
-    client.app.state.qa_service = DummyQA()
-    client.app.state.ner_service = None
-    client.app.state.cache = FakeCache()
+def test_answer_cache_hit(client: TestClient, services, monkeypatch):
+    services.embedding = DummyEmb()
+    services.qa = DummyQA()
+    services.ner = None
+    services.cache = FakeCache()
 
     import app.api.routes.ask as ask_route
     import app.services.retrieval.retriever as retr_mod

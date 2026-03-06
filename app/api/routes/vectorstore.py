@@ -1,7 +1,9 @@
 import re
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Query
 
+from app.api.deps import EmbeddingSvc
+from app.core.errors import InternalError, InvalidInput, NotFound
 from app.models.retrieval import (
     BuildIndexResponse,
     SearchHit,
@@ -19,14 +21,11 @@ DOC_ID_RE = re.compile(r"^[a-f0-9]{16,64}$")
 
 def _validate_doc_id(doc_id: str) -> None:
     if not DOC_ID_RE.match(doc_id):
-        raise HTTPException(status_code=400, detail="Invalid doc_id format.")
+        raise InvalidInput("Invalid doc_id format.")
 
 
 @router.post("/documents/{doc_id}/index", response_model=BuildIndexResponse)
 def build_index(doc_id: str, force: bool = Query(False)) -> BuildIndexResponse:
-    """
-    FAISS index from embeddings artifacts.
-    """
     _validate_doc_id(doc_id)
 
     idx_path = get_faiss_index_path(doc_id)
@@ -35,7 +34,6 @@ def build_index(doc_id: str, force: bool = Query(False)) -> BuildIndexResponse:
         import json
 
         meta = json.loads(meta_path.read_text(encoding="utf-8"))
-
         return BuildIndexResponse(
             doc_id=doc_id,
             status="already_indexed",
@@ -48,11 +46,9 @@ def build_index(doc_id: str, force: bool = Query(False)) -> BuildIndexResponse:
     try:
         res = build_faiss_index(doc_id)
     except FileNotFoundError:
-        raise HTTPException(
-            status_code=404, detail="Embeddings not found. Run /embed first."
-        )
+        raise NotFound("Embeddings not found. Run /embed first.")
     except ValueError:
-        raise HTTPException(status_code=400, detail="Failed to build FAISS index.")
+        raise InvalidInput("Failed to build FAISS index.")
 
     return BuildIndexResponse(
         doc_id=doc_id,
@@ -65,31 +61,22 @@ def build_index(doc_id: str, force: bool = Query(False)) -> BuildIndexResponse:
 
 
 @router.post("/documents/{doc_id}/search", response_model=SearchResponse)
-def search_doc(request: Request, doc_id: str, body: SearchRequest) -> SearchResponse:
-    """
-    Search top-k chunks for a query (per-document)
-    """
+def search_doc(
+    doc_id: str, body: SearchRequest, emb_svc: EmbeddingSvc
+) -> SearchResponse:
     _validate_doc_id(doc_id)
 
-    svc = getattr(request.app.state, "embedding_service", None)
-    if svc is None:
-        raise HTTPException(
-            status_code=500, detail="Embedding service not initialized."
-        )
-
-    retriever = RetrieverService(svc)
+    retriever = RetrieverService(emb_svc)
 
     try:
         hits = retriever.search(doc_id=doc_id, query=body.query, top_k=body.top_k)
     except FileNotFoundError as e:
         msg = str(e)
         if "FAISS_INDEX_NOT_FOUND" in msg:
-            raise HTTPException(
-                status_code=404, detail="FAISS index not found. Run /index first."
-            )
-        raise HTTPException(status_code=404, detail="Required artifacts missing.")
+            raise NotFound("FAISS index not found. Run /index first.")
+        raise NotFound("Required artifacts missing.")
     except Exception:
-        raise HTTPException(status_code=500, detail="Search failed unexpectedly.")
+        raise InternalError("Search failed unexpectedly.")
 
     return SearchResponse(
         doc_id=doc_id,

@@ -5,10 +5,10 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
-import faiss
 import numpy as np
 
 from app.core.config import settings
+from app.core.errors import ExternalDependencyMissing
 from app.services.indexing.embed_cunks import _chunking_version
 from app.storage.embeddings import (
     get_embeddings_info_path,
@@ -70,6 +70,11 @@ def build_faiss_index(doc_id: str) -> FaissBuildResult:
     if dim <= 0:
         raise ValueError("INVALID_DIM")
 
+    try:
+        import faiss
+    except ModuleNotFoundError as e:  # pragma: no cover
+        raise ExternalDependencyMissing("faiss-cpu") from e
+
     # Choose index type (IP - inner product cosine, L2 - euclidian norm)
     if normalize:
         index = faiss.IndexFlatIP(dim)
@@ -108,7 +113,12 @@ def build_faiss_index(doc_id: str) -> FaissBuildResult:
     )
 
 
-def load_faiss_index(doc_id: str) -> faiss.Index:
+def load_faiss_index(doc_id: str):
+    try:
+        import faiss
+    except ModuleNotFoundError as e:  # pragma: no cover
+        raise ExternalDependencyMissing("faiss-cpu") from e
+
     p = get_faiss_index_path(doc_id)
     if not p.exists():
         raise FileNotFoundError("FAISS_INDEX_NOT_FOUND")
@@ -117,17 +127,12 @@ def load_faiss_index(doc_id: str) -> faiss.Index:
 
 
 def search_index(
-    index: faiss.Index, query_vec: np.ndarray, top_k: int
+    index: Any, query_vec: np.ndarray, top_k: int
 ) -> tuple[np.ndarray, np.ndarray]:
-    """
-    query_vec: shape (1, D)
-    returns: (scores, indices) both shape (1, top_k)
-    """
     if query_vec.ndim == 1:
-        query_vec = query_vec.reshape(1, -1)
+        q = query_vec.reshape(1, -1).astype(np.float32)
+    else:
+        q = query_vec.astype(np.float32)
 
-    query_vec = query_vec.astype(np.float32)
-
-    scores, idx = index.search(query_vec, top_k)
-
-    return scores, idx
+    scores, ids = index.search(q, top_k)
+    return scores, ids

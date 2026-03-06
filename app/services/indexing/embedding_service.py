@@ -4,9 +4,9 @@ import time
 from dataclasses import dataclass
 
 import numpy as np
-from sentence_transformers import SentenceTransformer
 
 from app.core.config import settings
+from app.core.errors import ExternalDependencyMissing
 
 
 @dataclass(frozen=True)
@@ -23,14 +23,19 @@ class EmbeddingService:
 
     def __init__(self, cfg: EmbedConfig):
         self.cfg = cfg
-        self._model: SentenceTransformer | None = None
+        self._model = None
 
     def load(self) -> None:
         if self._model is None:
+            try:
+                from sentence_transformers import SentenceTransformer
+            except ModuleNotFoundError as e:  # pragma: no cover
+                raise ExternalDependencyMissing("sentence-transformers") from e
+
             self._model = SentenceTransformer(self.cfg.model_name)
 
     @property
-    def model(self) -> SentenceTransformer:
+    def model(self):
         if self._model is None:
             raise RuntimeError("Embedding model is not loaded. Call load() first.")
 

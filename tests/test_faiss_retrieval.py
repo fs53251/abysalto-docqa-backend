@@ -2,11 +2,10 @@ import json
 from pathlib import Path
 
 import numpy as np
+import pytest
 from fastapi.testclient import TestClient
 
-from app.main import app
-
-client = TestClient(app)
+pytest.importorskip("faiss")
 
 
 class DummyEmbeddingService:
@@ -105,8 +104,8 @@ def write_chunks_and_embeddings(temp_data_dir: Path, doc_id: str):
 
 
 def test_build_index_and_search_returns_expected_chunk(
-    temp_data_dir: Path, monkeypatch
-):
+    client: TestClient, temp_data_dir: Path, monkeypatch
+) -> None:
     doc_id = "f" * 32
     write_chunks_and_embeddings(temp_data_dir, doc_id)
 

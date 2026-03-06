@@ -1,9 +1,5 @@
 from fastapi.testclient import TestClient
 
-from app.main import app
-
-client = TestClient(app)
-
 
 class DummyEmbeddingService:
     def encode_texts(self, texts):
@@ -35,19 +31,19 @@ class DummyNerService:
         ]
 
 
-def test_ask_returns_answer_and_sources(monkeypatch):
-    client.app.state.embedding_service = DummyEmbeddingService()
+def test_ask_returns_answer_and_sources(client: TestClient, services, monkeypatch):
+    services.embedding = DummyEmbeddingService()
 
     import numpy as np
 
     monkeypatch.setattr(
-        client.app.state.embedding_service,
+        services.embedding,
         "encode_texts",
         lambda texts: np.array([[1.0, 0.0, 0.0]], dtype=np.float32),
     )
 
-    client.app.state.qa_service = DummyQAService()
-    client.app.state.ner_service = DummyNerService()
+    services.qa = DummyQAService()
+    services.ner = DummyNerService()
 
     import app.api.routes.ask as ask_route
     import app.services.retrieval.retriever as retr_mod

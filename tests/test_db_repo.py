@@ -14,6 +14,8 @@ from app.repositories.documents import (
 )
 from app.repositories.users import create_user, get_user, get_user_by_email
 
+sqlalchemy = pytest.importorskip("sqlalchemy")
+
 
 def _reset_db_engine(monkeypatch, sqlite_url: str):
     """
