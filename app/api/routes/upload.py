@@ -4,7 +4,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, File, UploadFile
 
-from app.api.deps import DbSession, SessionId
+from app.api.deps import CurrentIdentity, DbSession
 from app.core.config import settings
 from app.core.errors import InvalidInput, PayloadTooLarge, UnsupportedMediaType
 from app.core.identifiers import document_public_id, generate_document_id
@@ -36,7 +36,7 @@ def _validate_mime(upload_file: UploadFile) -> None:
 @router.post("/upload", response_model=UploadResponse)
 async def upload(
     db: DbSession,
-    session_id: SessionId,
+    identity: CurrentIdentity,
     files: list[UploadFile] = File(...),
 ) -> UploadResponse:
     if not files:
@@ -79,6 +79,12 @@ async def upload(
                     upsert_hash(saved.sha256, public_doc_id)
 
             write_metadata(saved, magic_verified=True)
+
+            owner_user_id = identity.user_id if identity.kind == "user" else None
+            owner_session_id = (
+                identity.session_id if identity.kind == "session" else None
+            )
+
             create_document(
                 db,
                 doc_id=doc_uuid,
@@ -87,7 +93,8 @@ async def upload(
                 size_bytes=saved.size_bytes,
                 sha256=saved.sha256,
                 stored_path=saved.stored_path,
-                owner_session_id=session_id,
+                owner_user_id=owner_user_id,
+                owner_session_id=owner_session_id,
                 status="uploaded",
             )
 

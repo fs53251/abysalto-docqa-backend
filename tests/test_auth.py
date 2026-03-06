@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from io import BytesIO
 
 from fastapi.testclient import TestClient
 
@@ -116,3 +117,43 @@ def test_protected_route_requires_token(client: TestClient) -> None:
     res = client.get("/auth/me")
     assert res.status_code == 401, res.text
     assert res.json()["error_code"] == "auth_required"
+
+
+def test_login_claims_existing_session_documents(client: TestClient) -> None:
+    upload_res = client.post(
+        "/upload",
+        files=[
+            (
+                "files",
+                (
+                    "claim-me.pdf",
+                    BytesIO(b"%PDF-1.4 fake pdf content"),
+                    "application/pdf",
+                ),
+            )
+        ],
+    )
+    assert upload_res.status_code == 200, upload_res.text
+    uploaded_doc_id = upload_res.json()["documents"][0]["doc_id"]
+
+    register_res = client.post(
+        "/auth/register",
+        json={"email": "claim@example.com", "password": "supersecret123"},
+    )
+    assert register_res.status_code == 201, register_res.text
+
+    login_res = client.post(
+        "/auth/login",
+        json={"email": "claim@example.com", "password": "supersecret123"},
+    )
+    assert login_res.status_code == 200, login_res.text
+    token = login_res.json()["access_token"]
+
+    docs_res = client.get(
+        "/documents",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert docs_res.status_code == 200, docs_res.text
+    docs = docs_res.json()["documents"]
+    assert len(docs) == 1
+    assert docs[0]["doc_id"] == uploaded_doc_id

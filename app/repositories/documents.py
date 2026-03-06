@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Iterable
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -8,6 +9,7 @@ from sqlalchemy import and_, delete, select, update
 from sqlalchemy.orm import Session
 
 from app.core.errors import http_error
+from app.core.identity import RequestIdentity
 from app.core.identifiers import generate_document_id, parse_document_public_id
 from app.db.models import Document
 
@@ -21,6 +23,16 @@ def _validate_owner_identity(
         raise ValueError("DOCUMENT_OWNER_REQUIRED")
     if owner_user_id is not None and owner_session_id is not None:
         raise ValueError("DOCUMENT_OWNER_AMBIGUOUS")
+
+
+def _ownership_filter(identity: RequestIdentity):
+    if identity.kind == "user":
+        return Document.owner_user_id == identity.user_id
+
+    return and_(
+        Document.owner_user_id.is_(None),
+        Document.owner_session_id == identity.session_id,
+    )
 
 
 def create_document(
@@ -75,15 +87,15 @@ def get_document_by_public_id(db: Session, *, doc_id: str) -> Optional[Document]
     return get_document(db, doc_id=parsed)
 
 
-def get_document_for_session(
+def get_document_for_identity(
     db: Session,
     *,
     doc_id: uuid.UUID,
-    session_id: str,
+    identity: RequestIdentity,
 ) -> Document:
     stmt = select(Document).where(
         Document.id == doc_id,
-        Document.owner_session_id == session_id,
+        _ownership_filter(identity),
     )
     doc = db.execute(stmt).scalars().first()
     if doc is None:
@@ -91,22 +103,79 @@ def get_document_for_session(
     return doc
 
 
-def list_documents_for_user(db: Session, *, user_id: uuid.UUID) -> list[Document]:
+def list_documents_for_identity(
+    db: Session,
+    *,
+    identity: RequestIdentity,
+) -> list[Document]:
     stmt = (
         select(Document)
-        .where(Document.owner_user_id == user_id)
+        .where(_ownership_filter(identity))
         .order_by(Document.created_at.desc())
     )
     return list(db.execute(stmt).scalars().all())
+
+
+def assert_documents_owned_by_identity(
+    db: Session,
+    *,
+    doc_ids: Iterable[uuid.UUID],
+    identity: RequestIdentity,
+) -> list[Document]:
+    ordered_ids: list[uuid.UUID] = []
+    seen: set[uuid.UUID] = set()
+
+    for doc_id in doc_ids:
+        if doc_id in seen:
+            continue
+        seen.add(doc_id)
+        ordered_ids.append(doc_id)
+
+    if not ordered_ids:
+        return []
+
+    stmt = select(Document).where(
+        Document.id.in_(ordered_ids),
+        _ownership_filter(identity),
+    )
+    owned_documents = list(db.execute(stmt).scalars().all())
+    owned_by_id = {document.id: document for document in owned_documents}
+
+    if len(owned_by_id) != len(ordered_ids):
+        raise http_error(
+            403,
+            "doc_forbidden",
+            "One or more requested documents are not accessible.",
+        )
+
+    return [owned_by_id[doc_id] for doc_id in ordered_ids]
+
+
+def get_document_for_session(
+    db: Session,
+    *,
+    doc_id: uuid.UUID,
+    session_id: str,
+) -> Document:
+    return get_document_for_identity(
+        db,
+        doc_id=doc_id,
+        identity=RequestIdentity.for_session(session_id),
+    )
+
+
+def list_documents_for_user(db: Session, *, user_id: uuid.UUID) -> list[Document]:
+    return list_documents_for_identity(
+        db,
+        identity=RequestIdentity.for_user(user_id),
+    )
 
 
 def list_documents_for_session(db: Session, *, session_id: str) -> list[Document]:
-    stmt = (
-        select(Document)
-        .where(Document.owner_session_id == session_id)
-        .order_by(Document.created_at.desc())
+    return list_documents_for_identity(
+        db,
+        identity=RequestIdentity.for_session(session_id),
     )
-    return list(db.execute(stmt).scalars().all())
 
 
 def claim_session_documents_for_user(

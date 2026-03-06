@@ -15,6 +15,7 @@ from app.models.auth import (
     RegisterRequest,
     TokenResponse,
 )
+from app.repositories.documents import claim_session_documents_for_user
 from app.repositories.users import create_user, get_user_by_email
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -29,15 +30,15 @@ def _token_response_for_user(user_id: str) -> TokenResponse:
 
 
 @router.post(
-    "/register", response_model=AuthUserResponse, status_code=status.HTTP_201_CREATED
+    "/register",
+    response_model=AuthUserResponse,
+    status_code=status.HTTP_201_CREATED,
 )
 def register(
     body: RegisterRequest,
     db: DbSession,
     session_id: SessionId,
 ) -> AuthUserResponse:
-    del session_id  # reserved for later session -> user claim flow
-
     if get_user_by_email(db, email=str(body.email)) is not None:
         raise Conflict("A user with this email already exists.")
 
@@ -51,6 +52,7 @@ def register(
     except IntegrityError as exc:
         raise Conflict("A user with this email already exists.") from exc
 
+    claim_session_documents_for_user(db, session_id=session_id, user_id=user.id)
     return AuthUserResponse.model_validate(user)
 
 
@@ -60,8 +62,6 @@ def login(
     db: DbSession,
     session_id: SessionId,
 ) -> TokenResponse:
-    del session_id  # reserved for later session -> user claim flow
-
     user = get_user_by_email(db, email=str(body.email))
     if user is None or not verify_password(body.password, user.password_hash):
         raise http_error(
@@ -77,6 +77,7 @@ def login(
             "User account is inactive.",
         )
 
+    claim_session_documents_for_user(db, session_id=session_id, user_id=user.id)
     return _token_response_for_user(str(user.id))
 
 
@@ -86,7 +87,7 @@ def me(current_user: CurrentUser) -> AuthUserResponse:
 
 
 @router.get("/identity", response_model=IdentityResponse)
-def auth_identiry(identity: CurrentIdentity) -> IdentityResponse:
+def auth_identity(identity: CurrentIdentity) -> IdentityResponse:
     return IdentityResponse(
         kind=identity.kind,
         user_id=identity.user_id,

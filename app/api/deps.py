@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
-from typing import Annotated, Literal
+from typing import Annotated
 
 from fastapi import Depends, Path, Request
 from fastapi.security.utils import get_authorization_scheme_param
@@ -10,12 +9,13 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import ApiError, InvalidInput, ServiceUnavailable
 from app.core.identifiers import parse_document_public_id
+from app.core.identity import RequestIdentity
 from app.core.request_context import set_identity
 from app.core.security.jwt import TokenExpiredError, TokenInvalidError, decode_token
 from app.core.security.session import generate_session_id
 from app.db.models import Document, User
 from app.db.session import get_db
-from app.repositories.documents import get_document_for_session
+from app.repositories.documents import get_document_for_identity
 from app.repositories.users import get_user
 from app.services.interfaces import (
     CachePort,
@@ -23,22 +23,6 @@ from app.services.interfaces import (
     NerServicePort,
     QaServicePort,
 )
-
-
-@dataclass(frozen=True)
-class RequestIdentity:
-    kind: Literal["user", "session"]
-    user_id: uuid.UUID | None
-    session_id: str | None
-
-    @property
-    def log_identity(self) -> str:
-        if self.kind == "user" and self.user_id is not None:
-            return f"user:{self.user_id}"
-        if self.session_id is None:
-            return "sess:-"
-
-        return f"sess:{self.session_id}"
 
 
 def _auth_error(error_code: str, message: str) -> ApiError:
@@ -71,7 +55,6 @@ def get_session_id(request: Request) -> str:
 
     session_id = generate_session_id()
     request.state.session_id = session_id
-
     return session_id
 
 
@@ -104,13 +87,9 @@ def get_optional_current_user(
         )
 
     request.state.user_id = user.id
-    request.state.identity = RequestIdentity(
-        kind="user",
-        user_id=user.id,
-        session_id=None,
-    )
-    set_identity(f"user:{user.id}")
-
+    identity = RequestIdentity.for_user(user.id)
+    request.state.identity = identity
+    set_identity(identity.log_identity)
     return user
 
 
@@ -130,22 +109,13 @@ def get_identity(
     current_user: User | None = Depends(get_optional_current_user),
 ) -> RequestIdentity:
     if current_user is not None:
-        identity = RequestIdentity(
-            kind="user",
-            user_id=current_user.id,
-            session_id=None,
-        )
+        identity = RequestIdentity.for_user(current_user.id)
     else:
         request.state.user_id = None
-        identity = RequestIdentity(
-            kind="session",
-            user_id=None,
-            session_id=session_id,
-        )
+        identity = RequestIdentity.for_session(session_id)
 
     request.state.identity = identity
     set_identity(identity.log_identity)
-
     return identity
 
 
@@ -160,10 +130,10 @@ def get_document_id(doc_id: str = Path(...)) -> str:
 def get_owned_document(
     doc_id: Annotated[str, Depends(get_document_id)],
     db: Session = Depends(get_db),
-    session_id: str = Depends(get_session_id),
+    identity: RequestIdentity = Depends(get_identity),
 ) -> Document:
     parsed_doc_id = parse_document_public_id(doc_id)
-    return get_document_for_session(db, doc_id=parsed_doc_id, session_id=session_id)
+    return get_document_for_identity(db, doc_id=parsed_doc_id, identity=identity)
 
 
 def get_embedding_service(request: Request) -> EmbeddingServicePort:

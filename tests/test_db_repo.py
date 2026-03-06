@@ -3,12 +3,17 @@ import uuid
 
 import pytest
 
+from app.core.errors import ApiError
+from app.core.identity import RequestIdentity
 from app.db.base import Base
 from app.db.session import get_engine, get_sessionmaker
 from app.repositories.documents import (
+    assert_documents_owned_by_identity,
     create_document,
     delete_expired_session_documents,
+    get_document_for_identity,
     get_document_for_session,
+    list_documents_for_identity,
     list_documents_for_session,
     list_documents_for_user,
     mark_document_indexed,
@@ -123,6 +128,75 @@ def test_documents_repository_session_ownership_and_cleanup(db_session):
     remaining = list_documents_for_session(db_session, session_id=session_id)
     assert len(remaining) == 1
     assert remaining[0].filename == "recent.pdf"
+
+
+def test_identity_repository_helpers(db_session):
+    user = create_user(
+        db_session,
+        email="owner@example.com",
+        password_hash="hash-owner",
+    )
+    session_id = str(uuid.uuid4())
+
+    user_doc = create_document(
+        db_session,
+        filename="user.pdf",
+        owner_user_id=user.id,
+        stored_path="/tmp/uploads/user/original/user.pdf",
+    )
+    session_doc = create_document(
+        db_session,
+        filename="session.pdf",
+        owner_session_id=session_id,
+        stored_path="/tmp/uploads/session/original/session.pdf",
+    )
+
+    user_identity = RequestIdentity.for_user(user.id)
+    session_identity = RequestIdentity.for_session(session_id)
+
+    user_docs = list_documents_for_identity(db_session, identity=user_identity)
+    assert [doc.id for doc in user_docs] == [user_doc.id]
+
+    session_docs = list_documents_for_identity(db_session, identity=session_identity)
+    assert [doc.id for doc in session_docs] == [session_doc.id]
+
+    fetched_user_doc = get_document_for_identity(
+        db_session,
+        doc_id=user_doc.id,
+        identity=user_identity,
+    )
+    assert fetched_user_doc.id == user_doc.id
+
+    fetched_session_doc = get_document_for_identity(
+        db_session,
+        doc_id=session_doc.id,
+        identity=session_identity,
+    )
+    assert fetched_session_doc.id == session_doc.id
+
+    with pytest.raises(ApiError) as user_miss:
+        get_document_for_identity(
+            db_session,
+            doc_id=session_doc.id,
+            identity=user_identity,
+        )
+    assert user_miss.value.status_code == 404
+
+    owned_docs = assert_documents_owned_by_identity(
+        db_session,
+        doc_ids=[user_doc.id],
+        identity=user_identity,
+    )
+    assert [doc.id for doc in owned_docs] == [user_doc.id]
+
+    with pytest.raises(ApiError) as forbidden:
+        assert_documents_owned_by_identity(
+            db_session,
+            doc_ids=[user_doc.id, session_doc.id],
+            identity=user_identity,
+        )
+    assert forbidden.value.status_code == 403
+    assert forbidden.value.error_code == "doc_forbidden"
 
 
 def test_mark_document_indexed_updates_status_and_timestamp(db_session):

@@ -7,14 +7,22 @@ import time
 import numpy as np
 from fastapi import APIRouter
 
-from app.api.deps import DbSession, EmbeddingSvc, OptCache, OptNerSvc, QaSvc, SessionId
+from app.api.deps import (
+    CurrentIdentity,
+    DbSession,
+    EmbeddingSvc,
+    OptCache,
+    OptNerSvc,
+    QaSvc,
+)
 from app.core.config import settings
 from app.core.errors import InvalidInput, NotFound
+from app.core.identity import RequestIdentity
 from app.core.identifiers import document_public_id, parse_document_public_id
 from app.models.ask import AskRequest, AskResponse, AskSource
 from app.repositories.documents import (
-    get_document_for_session,
-    list_documents_for_session,
+    assert_documents_owned_by_identity,
+    list_documents_for_identity,
 )
 from app.services.cache.cache_keys import (
     ans_key,
@@ -37,14 +45,23 @@ def _docs_digest(doc_ids: list[str]) -> str:
     return hashlib.sha256(joined.encode("utf-8")).hexdigest()[:16]
 
 
-def _scope_cache_key(session_id: str, scope_mode: str, doc_ids: list[str]) -> str:
-    session_hash = hashlib.sha256(session_id.encode("utf-8")).hexdigest()[:12]
-    return f"{scope_mode}:{session_hash}:{_docs_digest(doc_ids)}"
+def _scope_cache_key(
+    identity: RequestIdentity,
+    scope_mode: str,
+    doc_ids: list[str],
+) -> str:
+    identity_hash = hashlib.sha256(identity.log_identity.encode("utf-8")).hexdigest()[
+        :12
+    ]
+    return f"{scope_mode}:{identity_hash}:{_docs_digest(doc_ids)}"
 
 
-def _resolve_session_indexed_doc_ids(db, session_id: str) -> list[str]:
+def _resolve_identity_indexed_doc_ids(
+    db,
+    identity: RequestIdentity,
+) -> list[str]:
     doc_ids: list[str] = []
-    for document in list_documents_for_session(db, session_id=session_id):
+    for document in list_documents_for_identity(db, identity=identity):
         public_id = document_public_id(document.id)
         if get_faiss_index_path(public_id).exists():
             doc_ids.append(public_id)
@@ -53,10 +70,10 @@ def _resolve_session_indexed_doc_ids(db, session_id: str) -> list[str]:
 
 def _resolve_requested_doc_ids(
     db,
-    session_id: str,
+    identity: RequestIdentity,
     requested_doc_ids: list[str],
 ) -> list[str]:
-    resolved: list[str] = []
+    parsed_doc_ids = []
     seen: set[str] = set()
 
     for raw_doc_id in requested_doc_ids:
@@ -65,16 +82,21 @@ def _resolve_requested_doc_ids(
         except ValueError as exc:
             raise InvalidInput("One or more doc_ids are invalid.") from exc
 
-        document = get_document_for_session(
-            db,
-            doc_id=parsed_doc_id,
-            session_id=session_id,
-        )
-        public_id = document_public_id(document.id)
+        public_id = document_public_id(parsed_doc_id)
         if public_id in seen:
             continue
         seen.add(public_id)
+        parsed_doc_ids.append(parsed_doc_id)
 
+    owned_documents = assert_documents_owned_by_identity(
+        db,
+        doc_ids=parsed_doc_ids,
+        identity=identity,
+    )
+
+    resolved: list[str] = []
+    for document in owned_documents:
+        public_id = document_public_id(document.id)
         if get_faiss_index_path(public_id).exists():
             resolved.append(public_id)
 
@@ -85,7 +107,7 @@ def _resolve_requested_doc_ids(
 def ask(
     body: AskRequest,
     db: DbSession,
-    session_id: SessionId,
+    identity: CurrentIdentity,
     emb_svc: EmbeddingSvc,
     qa_svc: QaSvc,
     ner_svc: OptNerSvc,
@@ -102,18 +124,18 @@ def ask(
     if body.scope == "docs":
         if not body.doc_ids:
             raise InvalidInput("doc_ids required when scope='docs'.")
-        doc_ids = _resolve_requested_doc_ids(db, session_id, body.doc_ids)
+        doc_ids = _resolve_requested_doc_ids(db, identity, body.doc_ids)
         scope_mode = "docs"
     else:
-        doc_ids = _resolve_session_indexed_doc_ids(db, session_id)
-        scope_mode = "session"
+        doc_ids = _resolve_identity_indexed_doc_ids(db, identity)
+        scope_mode = "identity"
 
     if not doc_ids:
         raise NotFound(
-            "No indexed documents available for this session. Run /index first."
+            "No indexed documents available for this identity. Run /index first."
         )
 
-    cache_scope = _scope_cache_key(session_id, scope_mode, doc_ids)
+    cache_scope = _scope_cache_key(identity, scope_mode, doc_ids)
     pipeline_version = (
         f"qa={settings.QA_MODEL_NAME}|emb={settings.EMBEDDING_MODEL_NAME}|"
         f"ner={settings.NER_MODEL_NAME}|chunk={settings.CHUNK_SIZE_CHARS}-{settings.CHUNK_OVERLAP_CHARS}"
