@@ -3,9 +3,10 @@ from __future__ import annotations
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, UploadFile
 
 from app.core.config import settings
+from app.core.errors import InvalidInput, PayloadTooLarge, UnsupportedMediaType
 from app.models.upload import UploadItemResponse, UploadResponse
 from app.storage.dedup import find_existing_doc_id, upsert_hash
 from app.storage.files import read_first_bytes, save_upload_file_streaming, sniff_magic
@@ -17,21 +18,16 @@ router = APIRouter(tags=["documents"])
 def _validate_extension(filename: str) -> None:
     suffix = Path(filename).suffix.lower()
     if suffix not in settings.ALLOWED_EXTENSIONS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unsupported file extension '{suffix}'. Allowed: {settings.ALLOWED_EXTENSIONS}",
+        raise InvalidInput(
+            f"Unsupported file extension '{suffix}'. Allowed: {settings.ALLOWED_EXTENSIONS}"
         )
 
 
 def _validate_mime(upload_file: UploadFile) -> None:
     content_type = (upload_file.content_type or "").lower()
     if content_type not in settings.ALLOWED_MIME_TYPES:
-        raise HTTPException(
-            status_code=415,
-            detail=(
-                f"Unsupported content type '{content_type}'. "
-                f"Allowed: {settings.ALLOWED_MIME_TYPES}"
-            ),
+        raise UnsupportedMediaType(
+            f"Unsupported content type '{content_type}'. Allowed: {settings.ALLOWED_MIME_TYPES}"
         )
 
 
@@ -49,12 +45,11 @@ async def upload(files: list[UploadFile] = File(...)) -> UploadResponse:
     - optional sha256 deduplication index
     """
     if not files:
-        raise HTTPException(status_code=400, detail="No files provided.")
+        raise InvalidInput("No files provided.")
 
     if len(files) > settings.MAX_FILES_PER_REQUEST:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Too many files. Max allowed: {settings.MAX_FILES_PER_REQUEST}.",
+        raise InvalidInput(
+            f"Too many files. Max allowed: {settings.MAX_FILES_PER_REQUEST}."
         )
 
     max_bytes = settings.MAX_UPLOAD_MB * 1024 * 1024
@@ -73,9 +68,8 @@ async def upload(files: list[UploadFile] = File(...)) -> UploadResponse:
             first = await read_first_bytes(f, 16)
             magic_ok = sniff_magic(f.content_type or "", first)
             if not magic_ok:
-                raise HTTPException(
-                    status_code=415,
-                    detail=f"Magic-bytes verification failed for '{filename}'.",
+                raise UnsupportedMediaType(
+                    f"Magic-bytes verification failed for '{filename}'."
                 )
 
             # Save
@@ -86,11 +80,10 @@ async def upload(files: list[UploadFile] = File(...)) -> UploadResponse:
                 max_bytes=max_bytes,
             )
 
-            # If deduplcation, I am keeping the newly saved file but also provide dedup mapping.
+            # If deduplcation, keep the newly saved file but also provide dedup mapping.
             if settings.ENABLE_DEDUP:
                 existing = find_existing_doc_id(saved.sha256)
                 if existing and existing != doc_id:
-                    # Keep saved file, but return the existing doc_id as canonical
                     canonical_doc_id = existing
                 else:
                     canonical_doc_id = doc_id
@@ -111,13 +104,13 @@ async def upload(files: list[UploadFile] = File(...)) -> UploadResponse:
                 )
             )
 
-        except HTTPException as e:
+        except (InvalidInput, UnsupportedMediaType, PayloadTooLarge) as e:
             has_errors = True
             results.append(
                 UploadItemResponse(
                     filename=filename,
                     status="error",
-                    error_detail=str(e.detail),
+                    error_detail=str(e),
                 )
             )
         except ValueError as e:

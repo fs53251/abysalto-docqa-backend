@@ -2,11 +2,10 @@ import json
 from pathlib import Path
 
 import numpy as np
+import pytest
 from fastapi.testclient import TestClient
 
-from app.main import app
-
-client = TestClient(app)
+pytest.importorskip("faiss")
 
 
 class DummyEmbeddingService:
@@ -109,15 +108,17 @@ def write_chunks_and_embeddings(temp_data_dir: Path, doc_id: str):
     )
 
 
-def test_ask_happy_path_with_index(temp_data_dir: Path, monkeypatch):
+def test_ask_happy_path_with_index(
+    client: TestClient, services, temp_data_dir: Path, monkeypatch
+):
     doc_id = "f" * 32
     write_chunks_and_embeddings(temp_data_dir, doc_id)
 
-    client.app.state.embedding_service = DummyEmbeddingService()
-    client.app.state.qa_service = DummyQAService()
+    services.embedding = DummyEmbeddingService()
+    services.qa = DummyQAService()
 
     monkeypatch.setattr(
-        client.app.state.embedding_service,
+        services.embedding,
         "encode_texts",
         lambda texts: np.array([[1.0, 0.0, 0.0]], dtype=np.float32),
     )

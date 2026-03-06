@@ -7,6 +7,7 @@ from typing import Any
 import fitz  # PyMuPDF
 
 from app.core.config import settings
+from app.core.errors import ExternalDependencyMissing
 from app.services.ingestion.ocr import ocr_image_bytes
 from app.storage.files import ensure_dir
 from app.storage.processed import get_text_json_path
@@ -88,19 +89,31 @@ def extract_pdf_text_per_page(
         # than I need to convert PDF -> IMG, and use OCR
         if is_empty and ocr_fallback:
             png_bytes = _render_page_png_bytes(page, dpi=settings.OCR_DPI)
-            ocr = ocr_image_bytes(png_bytes)
-            ocr_text = normalize_text(ocr.text)
-
-            pages.append(
-                PageText(
-                    page=i + 1,
-                    text=ocr_text,
-                    char_count=len(ocr_text),
-                    is_empty=len(ocr_text) < settings.TEXT_EMPTY_MIN_CHARS,
-                    source="easyocr",
-                    confidence=ocr.confidence,
+            try:
+                ocr = ocr_image_bytes(png_bytes)
+                ocr_text = normalize_text(ocr.text)
+                pages.append(
+                    PageText(
+                        page=i + 1,
+                        text=ocr_text,
+                        char_count=len(ocr_text),
+                        is_empty=len(ocr_text) < settings.TEXT_EMPTY_MIN_CHARS,
+                        source="easyocr",
+                        confidence=ocr.confidence,
+                    )
                 )
-            )
+            except ExternalDependencyMissing:
+                # Fail-soft: if OCR deps aren't installed, keep page as empty pymupdf extraction
+                pages.append(
+                    PageText(
+                        page=i + 1,
+                        text=text,
+                        char_count=char_count,
+                        is_empty=is_empty,
+                        source="pymupdf",
+                        confidence=None,
+                    )
+                )
         else:
             pages.append(
                 PageText(

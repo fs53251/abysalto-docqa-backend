@@ -2,9 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from transformers import pipeline
-
 from app.core.config import settings
+from app.core.errors import ExternalDependencyMissing
 
 
 @dataclass(frozen=True)
@@ -24,6 +23,11 @@ class QAService:
 
     def load(self) -> None:
         if self._pipe is None:
+            try:
+                from transformers import pipeline
+            except ModuleNotFoundError as e:  # pragma: no cover
+                raise ExternalDependencyMissing("transformers") from e
+
             self._pipe = pipeline(
                 "question-answering",
                 model=self.model_name,

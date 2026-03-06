@@ -14,6 +14,10 @@ class Settings(BaseSettings):
 
     APP_ENV: Literal["dev", "test", "prod"] = Field(default="dev", alias="ENV")
     LOG_LEVEL: str = "INFO"
+    # "text" (human readable) or "json" (structured logs)
+    LOG_FORMAT: Literal["text", "json"] = "text"
+    # When LOG_FORMAT=json, include exception tracebacks in JSON payloads.
+    LOG_JSON_INCLUDE_EXC_INFO: bool = True
 
     # Root directories
     DATA_DIR: str = "./data"

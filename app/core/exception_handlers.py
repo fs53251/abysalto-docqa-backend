@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.config import settings
-from app.core.errors import ApiError
+from app.core.errors import ApiError, DomainError, from_domain_error
 from app.core.request_context import get_request_id
 
 logger = logging.getLogger(__name__)
@@ -52,6 +52,16 @@ async def http_exception_handler(
     )
 
 
+async def domain_exception_handler(request: Request, exc: DomainError) -> JSONResponse:
+    api_exc = from_domain_error(exc)
+    return _error_response(
+        status_code=api_exc.status_code,
+        error_code=api_exc.error_code,
+        message=str(api_exc.detail),
+        details=getattr(api_exc, "details", None),
+    )
+
+
 async def validation_exception_handler(
     request: Request, exc: RequestValidationError
 ) -> JSONResponse:
@@ -69,7 +79,11 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
     # I still log server-side!!
     logger.exception(
         "Unhandled error",
-        extra={"path": request.url.path, "request_id": get_request_id()},
+        extra={
+            "path": request.url.path,
+            "method": request.method,
+            "request_id": get_request_id(),
+        },
     )
     return _error_response(
         status_code=500,

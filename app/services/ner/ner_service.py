@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from app.core.config import settings
+from app.core.errors import ExternalDependencyMissing
 from app.models.ner import Entity
 from app.services.retrieval.retriever import RetrievedChunk
 
@@ -27,7 +28,10 @@ class NerService:
 
     def load(self) -> None:
         if self._nlp is None:
-            import spacy
+            try:
+                import spacy
+            except ModuleNotFoundError as e:  # pragma: no cover
+                raise ExternalDependencyMissing("spacy") from e
 
             self._nlp = spacy.load(self.model_name)
 
