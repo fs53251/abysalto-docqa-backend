@@ -225,6 +225,11 @@ def mark_document_indexed(db: Session, *, document: Document) -> Document:
     return document
 
 
+def delete_document_record(db: Session, *, document: Document) -> None:
+    db.delete(document)
+    db.commit()
+
+
 def delete_expired_session_documents(
     db: Session, *, ttl_days: int, now: datetime | None = None
 ) -> int:
