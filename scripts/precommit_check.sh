@@ -36,6 +36,10 @@ poetry run black .
 echo "==> Running tests..."
 poetry run pytest -q
 
+if [[ -x "./scripts/cleanup.sh" ]]; then
+  echo "==> Running cleanup..."
+  ./scripts/cleanup.sh
+
 echo "==> All checks passed ✅"
 echo "==> Git status:"
 git status
