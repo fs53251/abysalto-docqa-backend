@@ -6,7 +6,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
-from app.core.request_context import set_request_id
+from app.core.request_context import reset_request_context, set_request_id
 
 
 class RequestIdMiddleware(BaseHTTPMiddleware):
@@ -22,6 +22,8 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
     header_name = "X-Request-Id"
 
     async def dispatch(self, request: Request, call_next):
+        reset_request_context()
+
         rid = request.headers.get(self.header_name)
         if not rid:
             rid = str(uuid.uuid4())

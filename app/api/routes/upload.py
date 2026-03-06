@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, UploadFile
@@ -20,6 +21,7 @@ from app.storage.files import read_first_bytes, save_upload_file_streaming, snif
 from app.storage.metadata import write_metadata
 
 router = APIRouter(tags=["documents"])
+logger = logging.getLogger(__name__)
 
 upload_rate_limit = rate_limit(
     limit=lambda: settings.UPLOAD_RATE_LIMIT_PER_MIN,
@@ -112,6 +114,16 @@ async def upload(
                 owner_user_id=owner_user_id,
                 owner_session_id=owner_session_id,
                 status="uploaded",
+            )
+
+            logger.info(
+                "upload created",
+                extra={
+                    "event": "upload.created",
+                    "doc_id": public_doc_id,
+                    "document_filename": saved.original_filename,
+                    "owner_type": identity.kind,
+                },
             )
 
             item_status = "uploaded"

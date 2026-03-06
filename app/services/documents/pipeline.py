@@ -146,6 +146,14 @@ def process_uploaded_document(
     dim: int | None = None
 
     mark_document_processing(db, document=document)
+    logger.info(
+        "upload processing started",
+        extra={
+            "event": "upload.processing.started",
+            "doc_id": doc_id,
+            "document_filename": document.filename,
+        },
+    )
 
     try:
         page_count = _extract_document(document=document)
@@ -155,12 +163,15 @@ def process_uploaded_document(
         mark_document_indexed(db, document=document)
 
         logger.info(
-            "upload pipeline completed doc_id=%s pages=%s chunks=%s rows=%s dim=%s",
-            doc_id,
-            page_count,
-            chunk_count,
-            row_count,
-            dim,
+            "upload processing finished",
+            extra={
+                "event": "upload.processing.finished",
+                "doc_id": doc_id,
+                "pages": page_count,
+                "chunks": chunk_count,
+                "rows": row_count,
+                "dim": dim,
+            },
         )
 
         return UploadProcessingResult(
@@ -174,9 +185,16 @@ def process_uploaded_document(
     except DomainError as exc:
         mark_document_failed(db, document=document)
         logger.warning(
-            "upload pipeline failed doc_id=%s status=failed detail=%s",
-            doc_id,
-            exc.message,
+            "upload processing failed",
+            extra={
+                "event": "upload.processing.failed",
+                "doc_id": doc_id,
+                "pages": page_count,
+                "chunks": chunk_count,
+                "rows": row_count,
+                "dim": dim,
+                "outcome": exc.error_code,
+            },
         )
         return UploadProcessingResult(
             doc_id=doc_id,
@@ -189,7 +207,18 @@ def process_uploaded_document(
         )
     except Exception:
         mark_document_failed(db, document=document)
-        logger.exception("upload pipeline failed unexpectedly doc_id=%s", doc_id)
+        logger.exception(
+            "upload processing failed unexpectedly",
+            extra={
+                "event": "upload.processing.failed",
+                "doc_id": doc_id,
+                "pages": page_count,
+                "chunks": chunk_count,
+                "rows": row_count,
+                "dim": dim,
+                "outcome": "unexpected_error",
+            },
+        )
         return UploadProcessingResult(
             doc_id=doc_id,
             status="failed",
@@ -214,8 +243,12 @@ def process_uploaded_document_task(
         document = get_document(db, doc_id=parsed_doc_id)
         if document is None:
             logger.warning(
-                "background upload pipeline skipped missing_doc_id=%s",
-                public_doc_id,
+                "background upload pipeline skipped missing document",
+                extra={
+                    "event": "upload.processing.skipped",
+                    "doc_id": public_doc_id,
+                    "outcome": "missing_document",
+                },
             )
             return
 

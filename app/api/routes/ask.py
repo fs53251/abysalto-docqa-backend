@@ -19,6 +19,7 @@ from app.core.config import settings
 from app.core.errors import InvalidInput, NotFound
 from app.core.identity import RequestIdentity
 from app.core.identifiers import document_public_id, parse_document_public_id
+from app.core.log_safety import safe_excerpt
 from app.models.ask import AskRequest, AskResponse, AskSource
 from app.repositories.documents import (
     assert_documents_owned_by_identity,
@@ -167,6 +168,7 @@ def ask(
     )
     index_version = "v1"
     normalized_question = normalize_question(question_raw)
+    question_excerpt = safe_excerpt(normalized_question, max_chars=120)
     top_k = body.top_k
     cache_hit = False
 
@@ -194,16 +196,19 @@ def ask(
                 )
                 if sim >= settings.SEMANTIC_CACHE_THRESHOLD:
                     cache_hit = True
-                    latency_ms = (time.perf_counter() - started_at) * 1000
+                    latency_ms = round((time.perf_counter() - started_at) * 1000, 2)
                     logger.info(
-                        "ask cache_hit=1 layer=semantic sim=%.3f latency_ms=%.2f",
-                        sim,
-                        latency_ms,
+                        "ask completed from semantic cache",
                         extra={
+                            "event": "ask.completed",
                             "cache_hit": 1,
                             "layer": "semantic",
                             "sim": sim,
                             "latency_ms": latency_ms,
+                            "doc_ids_count": len(doc_ids),
+                            "top_k": top_k,
+                            "question_excerpt": question_excerpt,
+                            "source_count": len(resp_hit.value.get("sources", [])),
                         },
                     )
                     return AskResponse(**resp_hit.value)
@@ -218,11 +223,19 @@ def ask(
         ans_cached = cache.get_json(answer_key)
         if ans_cached.hit:
             cache_hit = True
-            latency_ms = (time.perf_counter() - started_at) * 1000
+            latency_ms = round((time.perf_counter() - started_at) * 1000, 2)
             logger.info(
-                "ask cache_hit=1 layer=answer latency_ms=%.2f",
-                latency_ms,
-                extra={"cache_hit": 1, "layer": "answer", "latency_ms": latency_ms},
+                "ask completed from answer cache",
+                extra={
+                    "event": "ask.completed",
+                    "cache_hit": 1,
+                    "layer": "answer",
+                    "latency_ms": latency_ms,
+                    "doc_ids_count": len(doc_ids),
+                    "top_k": top_k,
+                    "question_excerpt": question_excerpt,
+                    "source_count": len(ans_cached.value.get("sources", [])),
+                },
             )
             return AskResponse(**ans_cached.value)
 
@@ -356,11 +369,17 @@ def ask(
                 settings.CACHE_TTL_SECONDS,
             )
 
-    latency_ms = (time.perf_counter() - started_at) * 1000
+    latency_ms = round((time.perf_counter() - started_at) * 1000, 2)
     logger.info(
-        "ask cache_hit=%d latency_ms=%.2f",
-        1 if cache_hit else 0,
-        latency_ms,
-        extra={"cache_hit": 1 if cache_hit else 0, "latency_ms": latency_ms},
+        "ask completed",
+        extra={
+            "event": "ask.completed",
+            "cache_hit": 1 if cache_hit else 0,
+            "latency_ms": latency_ms,
+            "doc_ids_count": len(doc_ids),
+            "top_k": top_k,
+            "question_excerpt": question_excerpt,
+            "source_count": len(response_obj.sources),
+        },
     )
     return response_obj

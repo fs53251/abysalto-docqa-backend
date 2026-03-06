@@ -25,6 +25,7 @@ from app.core.exception_handlers import (
     validation_exception_handler,
 )
 from app.core.logging import configure_logging
+from app.core.middleware.access_logging import AccessLoggingMiddleware
 from app.core.middleware.request_id import RequestIdMiddleware
 from app.core.middleware.security_headers import SecurityHeadersMiddleware
 from app.core.middleware.session_identity import SessionIdentityMiddleware
@@ -66,9 +67,10 @@ app.add_middleware(
     expose_headers=["X-Request-Id", "Retry-After"],
 )
 
-app.add_middleware(RequestIdMiddleware)
-app.add_middleware(SessionIdentityMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(SessionIdentityMiddleware)
+app.add_middleware(AccessLoggingMiddleware)
+app.add_middleware(RequestIdMiddleware)
 
 app.include_router(health_router)
 app.include_router(auth_router)

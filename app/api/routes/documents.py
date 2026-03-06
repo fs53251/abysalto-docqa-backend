@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter
 
 from app.api.deps import CurrentIdentity, DbSession, OwnedDocument
@@ -21,6 +23,7 @@ from app.services.documents.metadata import (
 )
 
 router = APIRouter(tags=["documents"])
+logger = logging.getLogger(__name__)
 
 
 def _owner_type(document) -> str:
@@ -89,8 +92,18 @@ def delete_document(
     db: DbSession,
 ) -> DocumentDeleteResponse:
     public_doc_id = document_public_id(document.id)
+    owner_type = _owner_type(document)
 
     delete_document_storage(public_doc_id)
     delete_document_record(db, document=document)
+
+    logger.info(
+        "document deleted",
+        extra={
+            "event": "document.deleted",
+            "doc_id": public_doc_id,
+            "owner_type": owner_type,
+        },
+    )
 
     return DocumentDeleteResponse(doc_id=public_doc_id)
