@@ -7,6 +7,8 @@ from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 
+from app.core.config import settings
+
 fitz = pytest.importorskip("fitz")
 
 
@@ -19,16 +21,18 @@ def make_pdf_bytes_empty_page() -> bytes:
 
 
 def test_pdf_ocr_fallback_used_when_empty(
-    client: TestClient, temp_data_dir: Path, monkeypatch
+    client: TestClient,
+    temp_data_dir: Path,
+    monkeypatch,
 ):
-    # Upload empty PDF (valid)
+    monkeypatch.setattr(settings, "UPLOAD_AUTO_PROCESS", False)
+
     pdf_bytes = make_pdf_bytes_empty_page()
     files = [("files", ("empty.pdf", BytesIO(pdf_bytes), "application/pdf"))]
     r = client.post("/upload", files=files)
     assert r.status_code == 200, r.text
     doc_id = r.json()["documents"][0]["doc_id"]
 
-    # Mock OCR in pdf_text module
     from app.services.ingestion import pdf_text as pdf_text_mod
 
     class DummyOcr:
@@ -48,18 +52,18 @@ def test_pdf_ocr_fallback_used_when_empty(
 
 
 def test_image_extract_calls_mocked_route_function(
-    client: TestClient, temp_data_dir: Path, monkeypatch
+    client: TestClient,
+    temp_data_dir: Path,
+    monkeypatch,
 ):
-    # Use a real-looking PNG header to satisfy upload magic check,
-    # but we will NOT let OCR/PIL run because we patch route-level function.
+    monkeypatch.setattr(settings, "UPLOAD_AUTO_PROCESS", False)
+
     png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 128
     files = [("files", ("img.png", BytesIO(png), "image/png"))]
     r = client.post("/upload", files=files)
     assert r.status_code == 200, r.text
     doc_id = r.json()["documents"][0]["doc_id"]
 
-    # IMPORTANT: patch the symbol used by the route module (extract.py),
-    # because extract.py imports extract_image_text directly.
     import app.api.routes.extract as extract_route
 
     dummy = SimpleNamespace(doc_id=doc_id, text="IMG MOCK", confidence=0.66)
@@ -69,7 +73,6 @@ def test_image_extract_calls_mocked_route_function(
         lambda doc_id, image_path: dummy,
     )
 
-    # Also patch save_image_text_json to write deterministic output without OCR
     def fake_save_image_text_json(extracted):
         import json
 

@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from app.storage.files import get_upload_root
+from app.storage.files import ensure_path_under_root, get_upload_root
 
 
 def get_metadata_path(doc_id: str) -> Path:
@@ -24,4 +24,4 @@ def get_original_file_path(doc_id: str) -> Path:
     if not stored_path:
         raise FileNotFoundError("MISSING_STORED_PATH")
 
-    return Path(stored_path)
+    return ensure_path_under_root(Path(stored_path), get_upload_root())

@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel
 
@@ -11,6 +11,7 @@ class UploadItemResponse(BaseModel):
     content_type: Optional[str] = None
     size_bytes: Optional[int] = None
     sha256: Optional[str] = None
+    owner_type: Optional[Literal["user", "session"]] = None
 
     error_detail: Optional[str] = None
 
