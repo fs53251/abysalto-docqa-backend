@@ -2,14 +2,18 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, File, UploadFile
+from fastapi import APIRouter, BackgroundTasks, File, UploadFile
 
-from app.api.deps import CurrentIdentity, DbSession
+from app.api.deps import CurrentIdentity, DbSession, EmbeddingSvc
 from app.core.config import settings
 from app.core.errors import InvalidInput, PayloadTooLarge, UnsupportedMediaType
 from app.core.identifiers import document_public_id, generate_document_id
 from app.models.upload import UploadItemResponse, UploadResponse
-from app.repositories.documents import create_document
+from app.repositories.documents import create_document, mark_document_processing
+from app.services.documents.pipeline import (
+    process_uploaded_document,
+    process_uploaded_document_task,
+)
 from app.storage.dedup import find_existing_doc_id, upsert_hash
 from app.storage.files import read_first_bytes, save_upload_file_streaming, sniff_magic
 from app.storage.metadata import write_metadata
@@ -35,8 +39,10 @@ def _validate_mime(upload_file: UploadFile) -> None:
 
 @router.post("/upload", response_model=UploadResponse)
 async def upload(
+    background_tasks: BackgroundTasks,
     db: DbSession,
     identity: CurrentIdentity,
+    emb_svc: EmbeddingSvc,
     files: list[UploadFile] = File(...),
 ) -> UploadResponse:
     if not files:
@@ -85,7 +91,7 @@ async def upload(
                 identity.session_id if identity.kind == "session" else None
             )
 
-            create_document(
+            document = create_document(
                 db,
                 doc_id=doc_uuid,
                 filename=saved.original_filename,
@@ -98,14 +104,39 @@ async def upload(
                 status="uploaded",
             )
 
+            item_status = "uploaded"
+            error_detail: str | None = None
+
+            if settings.UPLOAD_AUTO_PROCESS:
+                if settings.UPLOAD_PROCESSING_MODE == "background":
+                    mark_document_processing(db, document=document)
+                    background_tasks.add_task(
+                        process_uploaded_document_task,
+                        public_doc_id=public_doc_id,
+                        emb_svc=emb_svc,
+                    )
+                    item_status = "processing"
+                else:
+                    process_result = process_uploaded_document(
+                        db=db,
+                        document=document,
+                        emb_svc=emb_svc,
+                    )
+                    item_status = process_result.status
+                    error_detail = process_result.error_detail
+                    if process_result.status == "failed":
+                        has_errors = True
+
             results.append(
                 UploadItemResponse(
                     filename=saved.original_filename,
-                    status="ok",
+                    status=item_status,
                     doc_id=public_doc_id,
                     content_type=saved.content_type,
                     size_bytes=saved.size_bytes,
                     sha256=saved.sha256,
+                    owner_type=identity.kind,
+                    error_detail=error_detail,
                 )
             )
         except (InvalidInput, UnsupportedMediaType, PayloadTooLarge) as exc:
@@ -114,6 +145,7 @@ async def upload(
                 UploadItemResponse(
                     filename=filename,
                     status="error",
+                    owner_type=identity.kind,
                     error_detail=str(exc),
                 )
             )
@@ -121,12 +153,15 @@ async def upload(
             has_errors = True
             if str(exc) == "FILE_TOO_LARGE":
                 detail = f"File exceeds max size {settings.MAX_UPLOAD_MB} MB."
+            elif str(exc) == "PATH_TRAVERSAL_DETECTED":
+                detail = "Unsafe upload path detected."
             else:
                 detail = "Upload failed due to an internal validation error."
             results.append(
                 UploadItemResponse(
                     filename=filename,
                     status="error",
+                    owner_type=identity.kind,
                     error_detail=detail,
                 )
             )

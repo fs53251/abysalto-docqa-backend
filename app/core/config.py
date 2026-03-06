@@ -48,6 +48,8 @@ class Settings(BaseSettings):
         "image/jpeg",
         "image/tiff",
     )
+    UPLOAD_AUTO_PROCESS: bool = True
+    UPLOAD_PROCESSING_MODE: Literal["sync", "background"] = "sync"
 
     ENABLE_DEDUP: bool = True
 

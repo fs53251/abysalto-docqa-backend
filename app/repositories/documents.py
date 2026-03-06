@@ -197,6 +197,24 @@ def claim_session_documents_for_user(
     return int(result.rowcount or 0)
 
 
+def mark_document_processing(db: Session, *, document: Document) -> Document:
+    document.status = "processing"
+    document.indexed_at = None
+    db.add(document)
+    db.commit()
+    db.refresh(document)
+    return document
+
+
+def mark_document_failed(db: Session, *, document: Document) -> Document:
+    document.status = "failed"
+    document.indexed_at = None
+    db.add(document)
+    db.commit()
+    db.refresh(document)
+    return document
+
+
 def mark_document_indexed(db: Session, *, document: Document) -> Document:
     document.status = "indexed"
     if document.indexed_at is None:

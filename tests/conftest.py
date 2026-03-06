@@ -86,6 +86,8 @@ class AuthenticatedUser:
 def _set_test_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     monkeypatch.setattr(settings, "APP_ENV", "test", raising=False)
     monkeypatch.setattr(settings, "ENABLE_CACHE", False, raising=False)
+    monkeypatch.setattr(settings, "UPLOAD_AUTO_PROCESS", True, raising=False)
+    monkeypatch.setattr(settings, "UPLOAD_PROCESSING_MODE", "sync", raising=False)
     yield
 
 
