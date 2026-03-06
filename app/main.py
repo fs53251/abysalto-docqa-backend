@@ -7,24 +7,25 @@ from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.routes.ask import router as ask_router
+from app.api.routes.auth import router as auth_router
 from app.api.routes.chunk import router as chunk_router
+from app.api.routes.documents import router as documents_router
 from app.api.routes.embeddings import router as embeddings_router
 from app.api.routes.extract import router as extract_router
 from app.api.routes.health import router as health_router
 from app.api.routes.upload import router as upload_router
 from app.api.routes.vectorstore import router as vectorstore_router
-from app.api.routes.documents import router as documents_router
-from app.core.middleware.session_identity import SessionIdentityMiddleware
 from app.core.config import settings
+from app.core.errors import DomainError
 from app.core.exception_handlers import (
     domain_exception_handler,
     http_exception_handler,
     unhandled_exception_handler,
     validation_exception_handler,
 )
-from app.core.errors import DomainError
 from app.core.logging import configure_logging
 from app.core.middleware.request_id import RequestIdMiddleware
+from app.core.middleware.session_identity import SessionIdentityMiddleware
 from app.services.factories import init_app_services
 
 configure_logging()
@@ -63,6 +64,7 @@ app.add_middleware(SessionIdentityMiddleware)
 
 # Routes
 app.include_router(health_router)
+app.include_router(auth_router)
 app.include_router(upload_router)
 app.include_router(documents_router)
 app.include_router(extract_router)

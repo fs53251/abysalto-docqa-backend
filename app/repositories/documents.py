@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from sqlalchemy import and_, delete, select
+from sqlalchemy import and_, delete, select, update
 from sqlalchemy.orm import Session
 
 from app.core.errors import http_error
@@ -107,6 +107,25 @@ def list_documents_for_session(db: Session, *, session_id: str) -> list[Document
         .order_by(Document.created_at.desc())
     )
     return list(db.execute(stmt).scalars().all())
+
+
+def claim_session_documents_for_user(
+    db: Session,
+    *,
+    session_id: str,
+    user_id: uuid.UUID,
+) -> int:
+    stmt = (
+        update(Document)
+        .where(
+            Document.owner_session_id == session_id,
+            Document.owner_user_id.is_(None),
+        )
+        .values(owner_user_id=user_id, owner_session_id=None)
+    )
+    result = db.execute(stmt.execution_options(synchronize_session=False))
+    db.commit()
+    return int(result.rowcount or 0)
 
 
 def mark_document_indexed(db: Session, *, document: Document) -> Document:

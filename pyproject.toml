@@ -22,10 +22,13 @@ faiss-cpu = "^1.13.2"
 transformers = "^5.2.0"
 spacy = "^3.8.11"
 redis = "^7.2.1"
+argon2-cffi = "^25.1.0"
+PyJWT = "^2.10.1"
 
 sqlalchemy = "^2.0.36"
 alembic = "^1.14.0"
 psycopg = {version = "^3.2.3", extras = ["binary"]}
+email-validator = "^2.3.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^9.0.2"

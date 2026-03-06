@@ -18,27 +18,34 @@ else
   rm -rf .pytest_cache .ruff_cache .mypy_cache || true
   rm -f .coverage coverage.xml || true
   rm -rf htmlcov .tox .nox || true
+
   rm -rf data/uploads/* data/processed/* || true
   mkdir -p data/uploads data/processed
   touch data/uploads/.gitkeep data/processed/.gitkeep
-  #rm -f .env || true
 fi
+
 
 # 2) Lint + auto-fix
 echo "==> Ruff (with --fix)..."
 poetry run ruff check . --fix
 
+
 # 3) Format
 echo "==> Black formatting..."
 poetry run black .
+
 
 # 4) Tests
 echo "==> Running tests..."
 poetry run pytest -q
 
+
+# 5) Final cleanup (optional)
 if [[ -x "./scripts/cleanup.sh" ]]; then
-  echo "==> Running cleanup..."
+  echo "==> Running cleanup again..."
   ./scripts/cleanup.sh
+fi
+
 
 echo "==> All checks passed ✅"
 echo "==> Git status:"

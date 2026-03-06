@@ -1,32 +1,35 @@
-.PHONY: help install format lint test db-upgrade db-revision db-stamp
-
-help:
-	@echo "Targets:"
-	@echo "  install     - install deps via poetry"
-	@echo "  format      - format code (black)"
-	@echo "  lint        - lint (ruff)"
-	@echo "  test        - run pytest"
-	@echo "  db-upgrade  - run alembic upgrade head"
-	@echo "  db-revision - create new migration: make db-revision m='message'"
-	@echo "  db-stamp    - stamp head (useful if you created tables manually)"
+.PHONY: install run test lint format check clean redis-start redis-stop
 
 install:
 	poetry install
 
-format:
-	poetry run black .
+run: redis-start
+	poetry run uvicorn app.main:app --reload
+
+test: redis-start
+	poetry run pytest
 
 lint:
 	poetry run ruff check .
 
-test:
-	poetry run pytest -q
+format:
+	poetry run black .
 
-db-upgrade:
-	poetry run alembic upgrade head
+check:
+	./scripts/precommit_check.sh
 
-db-revision:
-	poetry run alembic revision --autogenerate -m "$(m)"
+clean:
+	./scripts/cleanup.sh
 
-db-stamp:
-	poetry run alembic stamp head
+redis-start:
+	@echo "==> Checking Redis..."
+	@if redis-cli ping > /dev/null 2>&1; then \
+		echo "Redis already running"; \
+	else \
+		echo "Starting Redis..."; \
+		redis-server --daemonize yes; \
+	fi
+
+redis-stop:
+	@echo "Stopping Redis..."
+	@redis-cli shutdown || true

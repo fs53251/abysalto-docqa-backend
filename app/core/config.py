@@ -21,8 +21,10 @@ class Settings(BaseSettings):
     UPLOAD_ROOT: str | None = None
     CACHE_ROOT: str | None = None
 
-    JWT_SECRET: str = "CHANGE_ME"
+    JWT_SECRET: str = "e802c66c7ac92c1ab9ac994e41aa9923353d1283ae5129f9ce30a12245e63026"
+    JWT_ALGORITHM: str = "HS256"
     JWT_EXP_MIN: int = 60
+    PASSWORD_MIN_LENGTH: int = 8
     RATE_LIMIT_PER_MIN: int = 60
     SESSION_COOKIE_NAME: str = "docqa_session"
     SESSION_COOKIE_SECRET: str | None = None
