@@ -13,6 +13,7 @@ from app.api.deps import (
     get_embedding_service,
     get_optional_cache,
     get_optional_ner_service,
+    get_optional_redis_client,
     get_qa_service,
 )
 from app.core.config import settings
@@ -57,6 +58,7 @@ class TestServices:
     qa: Any
     ner: Any | None = None
     cache: Any | None = None
+    redis_client: Any | None = None
 
 
 @dataclass(frozen=True)
@@ -88,6 +90,7 @@ def _set_test_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     monkeypatch.setattr(settings, "ENABLE_CACHE", False, raising=False)
     monkeypatch.setattr(settings, "UPLOAD_AUTO_PROCESS", True, raising=False)
     monkeypatch.setattr(settings, "UPLOAD_PROCESSING_MODE", "sync", raising=False)
+    monkeypatch.setattr(settings, "ENABLE_RATE_LIMITING", True, raising=False)
     yield
 
 
@@ -129,6 +132,7 @@ def services() -> TestServices:
         qa=DummyQAService(),
         ner=None,
         cache=None,
+        redis_client=None,
     )
 
 
@@ -138,6 +142,7 @@ def client(services: TestServices) -> Iterator[TestClient]:
     app.dependency_overrides[get_qa_service] = lambda: services.qa
     app.dependency_overrides[get_optional_ner_service] = lambda: services.ner
     app.dependency_overrides[get_optional_cache] = lambda: services.cache
+    app.dependency_overrides[get_optional_redis_client] = lambda: services.redis_client
 
     with TestClient(app) as c:
         yield c

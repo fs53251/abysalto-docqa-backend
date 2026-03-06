@@ -5,7 +5,7 @@ import logging
 import time
 
 import numpy as np
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from app.api.deps import (
     CurrentIdentity,
@@ -33,11 +33,18 @@ from app.services.cache.cache_keys import (
     sem_key,
 )
 from app.services.qa.ask_pipeline import answer_with_sources
+from app.services.rate_limit import identity_rate_limit_key, rate_limit
 from app.services.retrieval.retriever import RetrievedChunk, RetrieverService
 from app.storage.faiss_store import get_faiss_index_path
 
 router = APIRouter(tags=["qa"])
 logger = logging.getLogger(__name__)
+
+ask_rate_limit = rate_limit(
+    limit=lambda: settings.ASK_RATE_LIMIT_PER_MIN,
+    window_seconds=lambda: settings.RATE_LIMIT_WINDOW_SECONDS,
+    key_fn=identity_rate_limit_key("ask"),
+)
 
 
 def _docs_digest(doc_ids: list[str]) -> str:
@@ -124,7 +131,10 @@ def ask(
     qa_svc: QaSvc,
     ner_svc: OptNerSvc,
     cache: OptCache,
+    _rate_limit: None = Depends(ask_rate_limit),
 ) -> AskResponse:
+    del _rate_limit
+
     started_at = time.perf_counter()
 
     question_raw = body.question

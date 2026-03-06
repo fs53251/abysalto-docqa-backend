@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_EXP_MIN: int = 60
     PASSWORD_MIN_LENGTH: int = 8
-    RATE_LIMIT_PER_MIN: int = 60
+
     SESSION_COOKIE_NAME: str = "docqa_session"
     SESSION_COOKIE_SECRET: str | None = None
     SESSION_TTL_DAYS: int = 7
@@ -89,11 +89,16 @@ class Settings(BaseSettings):
     MAX_ENTITIES: int = 50
 
     REDIS_URL: str = "redis://localhost:6379/0"
-    CACHE_TTL_SECONDS: int = 3600
     ENABLE_CACHE: bool = True
-
+    CACHE_TTL_SECONDS: int = 3600
     ENABLE_SEMANTIC_CACHE: bool = True
     SEMANTIC_CACHE_THRESHOLD: float = 0.75
+
+    ENABLE_RATE_LIMITING: bool = True
+    RATE_LIMIT_WINDOW_SECONDS: int = 60
+    ASK_RATE_LIMIT_PER_MIN: int = 60
+    UPLOAD_RATE_LIMIT_PER_MIN: int = 10
+    LOGIN_RATE_LIMIT_PER_MIN: int = 10
 
 
 settings = Settings()

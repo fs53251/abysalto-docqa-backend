@@ -5,9 +5,11 @@ import logging
 from fastapi import FastAPI
 
 from app.core.config import settings
+from app.services.cache.redis_cache import RedisCache
 from app.services.indexing.embedding_service import default_embedding_service
 from app.services.ner.ner_service import default_ner_service
 from app.services.qa.qa_service import default_qa_service
+from app.services.redis_client import create_redis_client
 
 logger = logging.getLogger(__name__)
 
@@ -64,23 +66,49 @@ def init_ner_service(app: FastAPI) -> None:
         logger.exception("NER service init failed (disabled): %s", e)
 
 
+def init_redis_client(app: FastAPI) -> None:
+    if settings.APP_ENV == "test":
+        app.state.redis_client = None
+        logger.info("Redis client skipped in test env (use dependency overrides).")
+        return
+
+    redis_needed = bool(settings.REDIS_URL) and (
+        settings.ENABLE_CACHE or settings.ENABLE_RATE_LIMITING
+    )
+
+    if not redis_needed:
+        app.state.redis_client = None
+        logger.info("Redis client disabled by config.")
+        return
+
+    try:
+        client = create_redis_client(settings.REDIS_URL)
+        client.ping()
+        app.state.redis_client = client
+        logger.info("Redis client ready: %s", settings.REDIS_URL)
+    except Exception as e:
+        app.state.redis_client = None
+        logger.exception("Redis client init failed (disabled): %s", e)
+
+
 def init_cache(app: FastAPI) -> None:
-    # Cache u testovima tipično overrideamo fake-om; defaultno isključeno
     if settings.APP_ENV == "test":
         app.state.cache = None
         logger.info("Cache skipped in test env (use dependency overrides).")
         return
 
-    if not settings.ENABLE_CACHE or not settings.REDIS_URL:
+    if not settings.ENABLE_CACHE:
         app.state.cache = None
         logger.info("Cache disabled by config.")
         return
 
-    try:
-        from app.services.cache.redis_cache import RedisCache
+    client = getattr(app.state, "redis_client", None)
+    if client is None:
+        app.state.cache = None
+        logger.info("Cache unavailable because Redis client is unavailable.")
+        return
 
-        client = RedisCache.connect(settings.REDIS_URL)
-        client.ping()
+    try:
         app.state.cache = RedisCache(client)
         logger.info("Redis cache ready: %s", settings.REDIS_URL)
     except Exception as e:
@@ -89,10 +117,8 @@ def init_cache(app: FastAPI) -> None:
 
 
 def init_app_services(app: FastAPI) -> None:
-    """
-    Single entry point for all service initialization.
-    """
     init_embedding_service(app)
     init_qa_service(app)
     init_ner_service(app)
+    init_redis_client(app)
     init_cache(app)

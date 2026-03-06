@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import CurrentIdentity, CurrentUser, DbSession, SessionId
@@ -17,8 +17,15 @@ from app.models.auth import (
 )
 from app.repositories.documents import claim_session_documents_for_user
 from app.repositories.users import create_user, get_user_by_email
+from app.services.rate_limit import login_rate_limit_key, rate_limit
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+login_rate_limit = rate_limit(
+    limit=lambda: settings.LOGIN_RATE_LIMIT_PER_MIN,
+    window_seconds=lambda: settings.RATE_LIMIT_WINDOW_SECONDS,
+    key_fn=login_rate_limit_key("login"),
+)
 
 
 def _token_response_for_user(user_id: str) -> TokenResponse:
@@ -61,7 +68,10 @@ def login(
     body: LoginRequest,
     db: DbSession,
     session_id: SessionId,
+    _rate_limit: None = Depends(login_rate_limit),
 ) -> TokenResponse:
+    del _rate_limit
+
     user = get_user_by_email(db, email=str(body.email))
     if user is None or not verify_password(body.password, user.password_hash):
         raise http_error(

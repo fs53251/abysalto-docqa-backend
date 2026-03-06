@@ -37,6 +37,7 @@ def _error_response(
     error_code: str,
     message: str,
     details: Any | None = None,
+    headers: dict[str, str] | None = None,
 ) -> JSONResponse:
     payload: dict[str, Any] = {
         "error_code": error_code,
@@ -46,7 +47,11 @@ def _error_response(
     if settings.APP_ENV != "prod" and details is not None:
         payload["details"] = _sanitize_for_json(details)
 
-    return JSONResponse(status_code=status_code, content=payload)
+    return JSONResponse(
+        status_code=status_code,
+        content=payload,
+        headers=headers,
+    )
 
 
 async def http_exception_handler(
@@ -59,6 +64,7 @@ async def http_exception_handler(
             error_code=exc.error_code,
             message=str(exc.detail),
             details=getattr(exc, "details", None),
+            headers=getattr(exc, "headers", None),
         )
 
     return _error_response(
@@ -66,6 +72,7 @@ async def http_exception_handler(
         error_code=f"http_{exc.status_code}",
         message=str(exc.detail),
         details=None,
+        headers=getattr(exc, "headers", None),
     )
 
 
@@ -79,6 +86,7 @@ async def domain_exception_handler(
         error_code=api_exc.error_code,
         message=str(api_exc.detail),
         details=getattr(api_exc, "details", None),
+        headers=getattr(api_exc, "headers", None),
     )
 
 

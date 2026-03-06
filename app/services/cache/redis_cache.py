@@ -6,7 +6,9 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
-import redis
+
+from app.services.interfaces import RedisClientPort
+from app.services.redis_client import create_redis_client
 
 logger = logging.getLogger(__name__)
 
@@ -18,14 +20,12 @@ class CacheGetResult:
 
 
 class RedisCache:
-    def __init__(self, client: redis.Redis):
+    def __init__(self, client: RedisClientPort):
         self.client = client
 
     @staticmethod
-    def connect(url: str) -> redis.Redis:
-        # decode_responses = False -> bytes
-        # encoding is menaged explicitly
-        return redis.Redis.from_url(url, decode_responses=False)
+    def connect(url: str) -> RedisClientPort:
+        return create_redis_client(url)
 
     def get_json(self, key: str) -> CacheGetResult:
         raw = self.client.get(key)

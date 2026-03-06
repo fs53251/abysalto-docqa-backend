@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, File, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, UploadFile
 
 from app.api.deps import CurrentIdentity, DbSession, EmbeddingSvc
 from app.core.config import settings
@@ -14,11 +14,18 @@ from app.services.documents.pipeline import (
     process_uploaded_document,
     process_uploaded_document_task,
 )
+from app.services.rate_limit import identity_rate_limit_key, rate_limit
 from app.storage.dedup import find_existing_doc_id, upsert_hash
 from app.storage.files import read_first_bytes, save_upload_file_streaming, sniff_magic
 from app.storage.metadata import write_metadata
 
 router = APIRouter(tags=["documents"])
+
+upload_rate_limit = rate_limit(
+    limit=lambda: settings.UPLOAD_RATE_LIMIT_PER_MIN,
+    window_seconds=lambda: settings.RATE_LIMIT_WINDOW_SECONDS,
+    key_fn=identity_rate_limit_key("upload"),
+)
 
 
 def _validate_extension(filename: str) -> None:
@@ -44,7 +51,10 @@ async def upload(
     identity: CurrentIdentity,
     emb_svc: EmbeddingSvc,
     files: list[UploadFile] = File(...),
+    _rate_limit: None = Depends(upload_rate_limit),
 ) -> UploadResponse:
+    del _rate_limit
+
     if not files:
         raise InvalidInput("No files provided.")
 

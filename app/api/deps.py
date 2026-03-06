@@ -22,6 +22,7 @@ from app.services.interfaces import (
     EmbeddingServicePort,
     NerServicePort,
     QaServicePort,
+    RedisClientPort,
 )
 
 
@@ -158,6 +159,10 @@ def get_optional_cache(request: Request) -> CachePort | None:
     return getattr(request.app.state, "cache", None)
 
 
+def get_optional_redis_client(request: Request) -> RedisClientPort | None:
+    return getattr(request.app.state, "redis_client", None)
+
+
 DbSession = Annotated[Session, Depends(get_db)]
 SessionId = Annotated[str, Depends(get_session_id)]
 OwnedDocument = Annotated[Document, Depends(get_owned_document)]
@@ -165,6 +170,7 @@ EmbeddingSvc = Annotated[EmbeddingServicePort, Depends(get_embedding_service)]
 QaSvc = Annotated[QaServicePort, Depends(get_qa_service)]
 OptNerSvc = Annotated[NerServicePort | None, Depends(get_optional_ner_service)]
 OptCache = Annotated[CachePort | None, Depends(get_optional_cache)]
+OptRedisClient = Annotated[RedisClientPort | None, Depends(get_optional_redis_client)]
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
 OptionalCurrentUser = Annotated[User | None, Depends(get_optional_current_user)]
