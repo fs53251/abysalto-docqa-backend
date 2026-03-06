@@ -1,3 +1,8 @@
+from __future__ import annotations
+
+from pathlib import Path
+import uuid
+
 from fastapi.testclient import TestClient
 
 
@@ -8,11 +13,11 @@ class DummyEmbeddingService:
 
 class DummyQAService:
     def answer(self, question: str, context: str):
-        class R:
+        class Result:
             answer = "MOCK ANSWER"
             score = 0.9
 
-        return R()
+        return Result()
 
 
 class DummyNerService:
@@ -31,7 +36,13 @@ class DummyNerService:
         ]
 
 
-def test_ask_returns_answer_and_sources(client: TestClient, services, monkeypatch):
+def test_ask_returns_answer_and_sources(
+    client: TestClient,
+    services,
+    temp_data_dir: Path,
+    create_owned_document,
+    monkeypatch,
+):
     services.embedding = DummyEmbeddingService()
 
     import numpy as np
@@ -45,12 +56,14 @@ def test_ask_returns_answer_and_sources(client: TestClient, services, monkeypatc
     services.qa = DummyQAService()
     services.ner = DummyNerService()
 
-    import app.api.routes.ask as ask_route
     import app.services.retrieval.retriever as retr_mod
     from app.services.retrieval.retriever import RetrievedChunk
 
-    monkeypatch.setattr(ask_route, "list_indexed_docs", lambda _: ["a" * 32])
-    monkeypatch.setattr(ask_route, "validate_doc_ids", lambda ids: ids)
+    doc_id = uuid.uuid4().hex
+    create_owned_document(client, doc_id=doc_id)
+    processed = temp_data_dir / "processed" / doc_id
+    processed.mkdir(parents=True, exist_ok=True)
+    (processed / "faiss.index").write_bytes(b"index")
 
     def fake_search(self, doc_id, query, top_k, query_emb=None):
         return [
@@ -66,15 +79,16 @@ def test_ask_returns_answer_and_sources(client: TestClient, services, monkeypatc
 
     monkeypatch.setattr(retr_mod.RetrieverService, "search", fake_search)
 
-    r = client.post(
-        "/ask", json={"question": "What is it?", "scope": "all", "top_k": 1}
+    response = client.post(
+        "/ask",
+        json={"question": "What is it?", "scope": "all", "top_k": 1},
     )
-    assert r.status_code == 200, r.text
-    data = r.json()
+    assert response.status_code == 200, response.text
+    data = response.json()
     assert data["answer"] == "MOCK ANSWER"
     assert data["confidence"] == 0.9
     assert len(data["sources"]) == 1
-    assert data["sources"][0]["doc_id"] == "a" * 32
+    assert data["sources"][0]["doc_id"] == doc_id
     assert data["sources"][0]["chunk_id"] == "chunk_1"
     assert len(data["entities"]) == 1
     assert data["entities"][0]["text"] == "John Doe"

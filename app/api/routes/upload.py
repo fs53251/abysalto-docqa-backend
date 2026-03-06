@@ -1,13 +1,15 @@
 from __future__ import annotations
 
-import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, File, UploadFile
 
+from app.api.deps import DbSession, SessionId
 from app.core.config import settings
 from app.core.errors import InvalidInput, PayloadTooLarge, UnsupportedMediaType
+from app.core.identifiers import document_public_id, generate_document_id
 from app.models.upload import UploadItemResponse, UploadResponse
+from app.repositories.documents import create_document
 from app.storage.dedup import find_existing_doc_id, upsert_hash
 from app.storage.files import read_first_bytes, save_upload_file_streaming, sniff_magic
 from app.storage.metadata import write_metadata
@@ -32,18 +34,11 @@ def _validate_mime(upload_file: UploadFile) -> None:
 
 
 @router.post("/upload", response_model=UploadResponse)
-async def upload(files: list[UploadFile] = File(...)) -> UploadResponse:
-    """
-    Upload one or more files (PDF/images), validate, store on disk, return per-file results.
-
-    Extra added features:
-    - One bad file won't fail the whole request
-    - size limit per file
-    - max files per request
-    - magic-bytes sniff
-    - atomic write + safe filenames
-    - optional sha256 deduplication index
-    """
+async def upload(
+    db: DbSession,
+    session_id: SessionId,
+    files: list[UploadFile] = File(...),
+) -> UploadResponse:
     if not files:
         raise InvalidInput("No files provided.")
 
@@ -56,81 +51,77 @@ async def upload(files: list[UploadFile] = File(...)) -> UploadResponse:
     results: list[UploadItemResponse] = []
     has_errors = False
 
-    for f in files:
-        filename = f.filename or "file"
+    for upload_file in files:
+        filename = upload_file.filename or "file"
 
-        # Validation (per-file)
         try:
             _validate_extension(filename)
-            _validate_mime(f)
+            _validate_mime(upload_file)
 
-            # magic sniff
-            first = await read_first_bytes(f, 16)
-            magic_ok = sniff_magic(f.content_type or "", first)
-            if not magic_ok:
+            first = await read_first_bytes(upload_file, 16)
+            if not sniff_magic(upload_file.content_type or "", first):
                 raise UnsupportedMediaType(
                     f"Magic-bytes verification failed for '{filename}'."
                 )
 
-            # Save
-            doc_id = uuid.uuid4().hex
+            doc_uuid = generate_document_id()
+            public_doc_id = document_public_id(doc_uuid)
+
             saved = await save_upload_file_streaming(
-                upload_file=f,
-                doc_id=doc_id,
+                upload_file=upload_file,
+                doc_id=public_doc_id,
                 max_bytes=max_bytes,
             )
 
-            # If deduplcation, keep the newly saved file but also provide dedup mapping.
             if settings.ENABLE_DEDUP:
                 existing = find_existing_doc_id(saved.sha256)
-                if existing and existing != doc_id:
-                    canonical_doc_id = existing
-                else:
-                    canonical_doc_id = doc_id
-                    upsert_hash(saved.sha256, canonical_doc_id)
-            else:
-                canonical_doc_id = doc_id
+                if existing is None:
+                    upsert_hash(saved.sha256, public_doc_id)
 
             write_metadata(saved, magic_verified=True)
+            create_document(
+                db,
+                doc_id=doc_uuid,
+                filename=saved.original_filename,
+                content_type=saved.content_type,
+                size_bytes=saved.size_bytes,
+                sha256=saved.sha256,
+                stored_path=saved.stored_path,
+                owner_session_id=session_id,
+                status="uploaded",
+            )
 
             results.append(
                 UploadItemResponse(
                     filename=saved.original_filename,
                     status="ok",
-                    doc_id=canonical_doc_id,
+                    doc_id=public_doc_id,
                     content_type=saved.content_type,
                     size_bytes=saved.size_bytes,
                     sha256=saved.sha256,
                 )
             )
-
-        except (InvalidInput, UnsupportedMediaType, PayloadTooLarge) as e:
+        except (InvalidInput, UnsupportedMediaType, PayloadTooLarge) as exc:
             has_errors = True
             results.append(
                 UploadItemResponse(
                     filename=filename,
                     status="error",
-                    error_detail=str(e),
+                    error_detail=str(exc),
                 )
             )
-        except ValueError as e:
-            # file too large from storage layer
+        except ValueError as exc:
             has_errors = True
-            if str(e) == "FILE_TOO_LARGE":
-                results.append(
-                    UploadItemResponse(
-                        filename=filename,
-                        status="error",
-                        error_detail=f"File exceeds max size {settings.MAX_UPLOAD_MB} MB.",
-                    )
-                )
+            if str(exc) == "FILE_TOO_LARGE":
+                detail = f"File exceeds max size {settings.MAX_UPLOAD_MB} MB."
             else:
-                results.append(
-                    UploadItemResponse(
-                        filename=filename,
-                        status="error",
-                        error_detail="Upload failed due to an internal validation error.",
-                    )
+                detail = "Upload failed due to an internal validation error."
+            results.append(
+                UploadItemResponse(
+                    filename=filename,
+                    status="error",
+                    error_detail=detail,
                 )
+            )
 
     return UploadResponse(documents=results, has_errors=has_errors)

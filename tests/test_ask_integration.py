@@ -1,4 +1,5 @@
 import json
+import uuid
 from pathlib import Path
 
 import numpy as np
@@ -15,11 +16,11 @@ class DummyEmbeddingService:
 
 class DummyQAService:
     def answer(self, question: str, context: str):
-        class R:
+        class Result:
             answer = "INTEGRATION ANSWER"
             score = 0.8
 
-        return R()
+        return Result()
 
 
 def write_chunks_and_embeddings(temp_data_dir: Path, doc_id: str):
@@ -109,9 +110,14 @@ def write_chunks_and_embeddings(temp_data_dir: Path, doc_id: str):
 
 
 def test_ask_happy_path_with_index(
-    client: TestClient, services, temp_data_dir: Path, monkeypatch
+    client: TestClient,
+    services,
+    temp_data_dir: Path,
+    monkeypatch,
+    create_owned_document,
 ):
-    doc_id = "f" * 32
+    doc_id = uuid.uuid4().hex
+    create_owned_document(client, doc_id=doc_id)
     write_chunks_and_embeddings(temp_data_dir, doc_id)
 
     services.embedding = DummyEmbeddingService()
@@ -123,10 +129,10 @@ def test_ask_happy_path_with_index(
         lambda texts: np.array([[1.0, 0.0, 0.0]], dtype=np.float32),
     )
 
-    r1 = client.post(f"/documents/{doc_id}/index")
-    assert r1.status_code == 200, r1.text
+    build_response = client.post(f"/documents/{doc_id}/index")
+    assert build_response.status_code == 200, build_response.text
 
-    r2 = client.post(
+    ask_response = client.post(
         "/ask",
         json={
             "question": "What is the invoice total?",
@@ -135,8 +141,8 @@ def test_ask_happy_path_with_index(
             "top_k": 1,
         },
     )
-    assert r2.status_code == 200, r2.text
-    data = r2.json()
+    assert ask_response.status_code == 200, ask_response.text
+    data = ask_response.json()
     assert data["answer"] == "INTEGRATION ANSWER"
     assert len(data["sources"]) == 1
     assert data["sources"][0]["doc_id"] == doc_id

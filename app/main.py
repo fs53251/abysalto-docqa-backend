@@ -13,6 +13,8 @@ from app.api.routes.extract import router as extract_router
 from app.api.routes.health import router as health_router
 from app.api.routes.upload import router as upload_router
 from app.api.routes.vectorstore import router as vectorstore_router
+from app.api.routes.documents import router as documents_router
+from app.core.middleware.session_identity import SessionIdentityMiddleware
 from app.core.config import settings
 from app.core.exception_handlers import (
     domain_exception_handler,
@@ -57,10 +59,12 @@ app = FastAPI(title=settings.APP_NAME, lifespan=lifespan)
 
 # Middlewares
 app.add_middleware(RequestIdMiddleware)
+app.add_middleware(SessionIdentityMiddleware)
 
 # Routes
 app.include_router(health_router)
 app.include_router(upload_router)
+app.include_router(documents_router)
 app.include_router(extract_router)
 app.include_router(chunk_router)
 app.include_router(embeddings_router)

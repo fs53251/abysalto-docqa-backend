@@ -1,4 +1,5 @@
 import json
+import uuid
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -7,18 +8,23 @@ from fastapi.testclient import TestClient
 def write_text_json(temp_data_dir: Path, doc_id: str, pages: list[dict]):
     processed = temp_data_dir / "processed" / doc_id
     processed.mkdir(parents=True, exist_ok=True)
-    p = processed / "text.json"
-    p.write_text(
+    path = processed / "text.json"
+    path.write_text(
         json.dumps(
             {"doc_id": doc_id, "page_count": len(pages), "pages": pages}, indent=2
         ),
         encoding="utf-8",
     )
-    return p
+    return path
 
 
-def test_chunk_endpoint_creates_chunks_and_map(client: TestClient, temp_data_dir: Path):
-    doc_id = "a" * 32
+def test_chunk_endpoint_creates_chunks_and_map(
+    client: TestClient,
+    temp_data_dir: Path,
+    create_owned_document,
+):
+    doc_id = uuid.uuid4().hex
+    create_owned_document(client, doc_id=doc_id)
     pages = [
         {
             "page": 1,
@@ -35,19 +41,17 @@ def test_chunk_endpoint_creates_chunks_and_map(client: TestClient, temp_data_dir
     ]
     write_text_json(temp_data_dir, doc_id, pages)
 
-    r = client.post(f"/documents/{doc_id}/chunk")
-    assert r.status_code == 200, r.text
-    data = r.json()
+    response = client.post(f"/documents/{doc_id}/chunk")
+    assert response.status_code == 200, response.text
+    data = response.json()
     assert data["status"] == "chunked"
     assert data["chunk_count"] > 0
 
     chunks_path = Path(data["chunks_jsonl"])
     map_path = Path(data["chunk_map"])
-
     assert chunks_path.exists()
     assert map_path.exists()
 
-    # chunks.jsonl lines are valid JSON and contain required keys
     first_line = chunks_path.read_text(encoding="utf-8").splitlines()[0]
     obj = json.loads(first_line)
     assert obj["doc_id"] == doc_id
@@ -55,15 +59,19 @@ def test_chunk_endpoint_creates_chunks_and_map(client: TestClient, temp_data_dir
     assert "page" in obj
     assert "text" in obj
 
-    # chunk_map has mapping entries
-    m = json.loads(map_path.read_text(encoding="utf-8"))
-    assert m["doc_id"] == doc_id
-    assert "chunks" in m
-    assert len(m["chunks"]) == data["chunk_count"]
+    mapping = json.loads(map_path.read_text(encoding="utf-8"))
+    assert mapping["doc_id"] == doc_id
+    assert "chunks" in mapping
+    assert len(mapping["chunks"]) == data["chunk_count"]
 
 
-def test_chunk_endpoint_is_idempotent(client: TestClient, temp_data_dir: Path):
-    doc_id = "b" * 32
+def test_chunk_endpoint_is_idempotent(
+    client: TestClient,
+    temp_data_dir: Path,
+    create_owned_document,
+):
+    doc_id = uuid.uuid4().hex
+    create_owned_document(client, doc_id=doc_id)
     pages = [
         {
             "page": 1,
@@ -74,18 +82,23 @@ def test_chunk_endpoint_is_idempotent(client: TestClient, temp_data_dir: Path):
     ]
     write_text_json(temp_data_dir, doc_id, pages)
 
-    r1 = client.post(f"/documents/{doc_id}/chunk")
-    assert r1.status_code == 200
-    c1 = r1.json()["chunk_count"]
+    first = client.post(f"/documents/{doc_id}/chunk")
+    assert first.status_code == 200
+    chunk_count = first.json()["chunk_count"]
 
-    r2 = client.post(f"/documents/{doc_id}/chunk")
-    assert r2.status_code == 200
-    data2 = r2.json()
-    assert data2["status"] == "already_chunked"
-    assert data2["chunk_count"] == c1
+    second = client.post(f"/documents/{doc_id}/chunk")
+    assert second.status_code == 200
+    data = second.json()
+    assert data["status"] == "already_chunked"
+    assert data["chunk_count"] == chunk_count
 
 
-def test_chunk_requires_text_json(client: TestClient, temp_data_dir: Path):
-    doc_id = "c" * 32
-    r = client.post(f"/documents/{doc_id}/chunk")
-    assert r.status_code == 404
+def test_chunk_requires_text_json(
+    client: TestClient,
+    temp_data_dir: Path,
+    create_owned_document,
+):
+    doc_id = uuid.uuid4().hex
+    create_owned_document(client, doc_id=doc_id)
+    response = client.post(f"/documents/{doc_id}/chunk")
+    assert response.status_code == 404

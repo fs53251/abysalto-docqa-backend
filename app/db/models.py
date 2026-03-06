@@ -33,7 +33,6 @@ class User(Base):
         DateTime(timezone=True), default=_utcnow, nullable=False
     )
 
-    # Relationship
     documents: Mapped[list["Document"]] = relationship(back_populates="owner_user")
 
 
@@ -51,17 +50,15 @@ class Document(Base):
         index=True,
     )
     owner_session_id: Mapped[str | None] = mapped_column(
-        String(64), nullable=True, index=True
+        String(36), nullable=True, index=True
     )
 
     filename: Mapped[str] = mapped_column(String(512), nullable=False)
     content_type: Mapped[str | None] = mapped_column(String(128), nullable=True)
     size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     sha256: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
-
     stored_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
 
-    # status: uploaded/indexed/failed
     status: Mapped[str] = mapped_column(String(32), default="uploaded", nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(
@@ -71,5 +68,4 @@ class Document(Base):
         DateTime(timezone=True), nullable=True
     )
 
-    # Relationship
     owner_user: Mapped[User | None] = relationship(back_populates="documents")
