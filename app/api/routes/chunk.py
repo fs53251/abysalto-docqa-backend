@@ -1,36 +1,27 @@
-import re
+from __future__ import annotations
 
 from fastapi import APIRouter, Query
 
+from app.api.deps import OwnedDocument
 from app.core.errors import InvalidInput, NotFound, PayloadTooLarge
+from app.core.identifiers import document_public_id
 from app.models.chunking import ChunkBuildResponse
 from app.services.indexing.chunking import build_chunks_for_doc, save_chunks
 from app.storage.chunks import get_chunk_map_path, get_chunks_jsonl_path
 
 router = APIRouter(tags=["indexing"])
 
-DOC_ID_RE = re.compile(r"^[a-f0-9]{16,64}$")
-
-
-def _validate_doc_id(doc_id: str) -> None:
-    if not DOC_ID_RE.match(doc_id):
-        raise InvalidInput("Invalid doc_id format.")
-
 
 @router.post("/documents/{doc_id}/chunk", response_model=ChunkBuildResponse)
-def chunk_document(doc_id: str, force: bool = Query(False)) -> ChunkBuildResponse:
-    """
-    Create chunks.jsonl + chunk_map.json from processed/{doc_id}/text.json
-    chunks.jsonl has content while chunk_map is something like metadata
-    """
-    _validate_doc_id(doc_id)
-
+def chunk_document(
+    document: OwnedDocument, force: bool = Query(False)
+) -> ChunkBuildResponse:
+    doc_id = document_public_id(document.id)
     chunks_path = get_chunks_jsonl_path(doc_id)
     map_path = get_chunk_map_path(doc_id)
 
     if chunks_path.exists() and map_path.exists() and not force:
         count = sum(1 for _ in chunks_path.open("r", encoding="utf-8"))
-
         return ChunkBuildResponse(
             doc_id=doc_id,
             status="already_chunked",
@@ -41,15 +32,16 @@ def chunk_document(doc_id: str, force: bool = Query(False)) -> ChunkBuildRespons
 
     try:
         chunks, chunk_map = build_chunks_for_doc(doc_id)
-    except FileNotFoundError:
-        raise NotFound("text.json not found. Run extraction first.")
-    except ValueError as e:
-        if str(e) == "TOO_MANY_CHUNKS":
-            raise PayloadTooLarge("Too many chunks generated; adjust settings.")
-        raise InvalidInput("Invalid text.json format.")
+    except FileNotFoundError as exc:
+        raise NotFound("text.json not found. Run extraction first.") from exc
+    except ValueError as exc:
+        if str(exc) == "TOO_MANY_CHUNKS":
+            raise PayloadTooLarge(
+                "Too many chunks generated; adjust settings."
+            ) from exc
+        raise InvalidInput("Invalid text.json format.") from exc
 
     paths = save_chunks(doc_id, chunks, chunk_map)
-
     return ChunkBuildResponse(
         doc_id=doc_id,
         status="chunked",

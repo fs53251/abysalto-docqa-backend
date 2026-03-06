@@ -1,15 +1,21 @@
+from __future__ import annotations
+
+import hashlib
 import logging
-import re
 import time
-from pathlib import Path
 
 import numpy as np
 from fastapi import APIRouter
 
-from app.api.deps import EmbeddingSvc, OptCache, OptNerSvc, QaSvc
+from app.api.deps import DbSession, EmbeddingSvc, OptCache, OptNerSvc, QaSvc, SessionId
 from app.core.config import settings
 from app.core.errors import InvalidInput, NotFound
+from app.core.identifiers import document_public_id, parse_document_public_id
 from app.models.ask import AskRequest, AskResponse, AskSource
+from app.repositories.documents import (
+    get_document_for_session,
+    list_documents_for_session,
+)
 from app.services.cache.cache_keys import (
     ans_key,
     mask_entities,
@@ -25,41 +31,67 @@ from app.storage.faiss_store import get_faiss_index_path
 router = APIRouter(tags=["qa"])
 logger = logging.getLogger(__name__)
 
-DOC_ID_RE = re.compile(r"^[a-f0-9]{16,64}$")
+
+def _docs_digest(doc_ids: list[str]) -> str:
+    joined = ",".join(sorted(set(doc_ids)))
+    return hashlib.sha256(joined.encode("utf-8")).hexdigest()[:16]
 
 
-def list_indexed_docs(data_dir: str) -> list[str]:
-    root = Path(data_dir) / "processed"
-    if not root.exists():
-        return []
-
-    out: list[str] = []
-    for child in root.iterdir():
-        if child.is_dir() and DOC_ID_RE.match(child.name):
-            if (child / "faiss.index").exists():
-                out.append(child.name)
-    return out
+def _scope_cache_key(session_id: str, scope_mode: str, doc_ids: list[str]) -> str:
+    session_hash = hashlib.sha256(session_id.encode("utf-8")).hexdigest()[:12]
+    return f"{scope_mode}:{session_hash}:{_docs_digest(doc_ids)}"
 
 
-def validate_doc_ids(doc_ids: list[str]) -> list[str]:
-    valid: list[str] = []
-    for did in doc_ids:
-        if not DOC_ID_RE.match(did):
+def _resolve_session_indexed_doc_ids(db, session_id: str) -> list[str]:
+    doc_ids: list[str] = []
+    for document in list_documents_for_session(db, session_id=session_id):
+        public_id = document_public_id(document.id)
+        if get_faiss_index_path(public_id).exists():
+            doc_ids.append(public_id)
+    return doc_ids
+
+
+def _resolve_requested_doc_ids(
+    db,
+    session_id: str,
+    requested_doc_ids: list[str],
+) -> list[str]:
+    resolved: list[str] = []
+    seen: set[str] = set()
+
+    for raw_doc_id in requested_doc_ids:
+        try:
+            parsed_doc_id = parse_document_public_id(raw_doc_id)
+        except ValueError as exc:
+            raise InvalidInput("One or more doc_ids are invalid.") from exc
+
+        document = get_document_for_session(
+            db,
+            doc_id=parsed_doc_id,
+            session_id=session_id,
+        )
+        public_id = document_public_id(document.id)
+        if public_id in seen:
             continue
-        if get_faiss_index_path(did).exists():
-            valid.append(did)
-    return valid
+        seen.add(public_id)
+
+        if get_faiss_index_path(public_id).exists():
+            resolved.append(public_id)
+
+    return resolved
 
 
 @router.post("/ask", response_model=AskResponse)
 def ask(
     body: AskRequest,
+    db: DbSession,
+    session_id: SessionId,
     emb_svc: EmbeddingSvc,
     qa_svc: QaSvc,
     ner_svc: OptNerSvc,
     cache: OptCache,
 ) -> AskResponse:
-    t0 = time.perf_counter()
+    started_at = time.perf_counter()
 
     question_raw = (body.question or "").strip()
     if not question_raw:
@@ -70,165 +102,190 @@ def ask(
     if body.scope == "docs":
         if not body.doc_ids:
             raise InvalidInput("doc_ids required when scope='docs'.")
-        doc_ids = body.doc_ids
+        doc_ids = _resolve_requested_doc_ids(db, session_id, body.doc_ids)
+        scope_mode = "docs"
     else:
-        doc_ids = list_indexed_docs(settings.DATA_DIR)
+        doc_ids = _resolve_session_indexed_doc_ids(db, session_id)
+        scope_mode = "session"
 
-    doc_ids = validate_doc_ids(doc_ids)
     if not doc_ids:
-        raise NotFound("No indexed documents available. Run /index first.")
+        raise NotFound(
+            "No indexed documents available for this session. Run /index first."
+        )
 
-    scope = body.scope
+    cache_scope = _scope_cache_key(session_id, scope_mode, doc_ids)
     pipeline_version = (
         f"qa={settings.QA_MODEL_NAME}|emb={settings.EMBEDDING_MODEL_NAME}|"
         f"ner={settings.NER_MODEL_NAME}|chunk={settings.CHUNK_SIZE_CHARS}-{settings.CHUNK_OVERLAP_CHARS}"
     )
     index_version = "v1"
-
-    qn = normalize_question(question_raw)
+    normalized_question = normalize_question(question_raw)
     top_k = body.top_k
     cache_hit = False
 
-    # 1) Semantic cache
     if cache is not None and settings.ENABLE_CACHE and settings.ENABLE_SEMANTIC_CACHE:
-        mk = sem_key(scope, pipeline_version, qn, top_k)
-        emb_hit = cache.get_embedding(mk + ":emb")
-        resp_hit = cache.get_json(mk + ":resp")
+        semantic_key = sem_key(
+            cache_scope, pipeline_version, normalized_question, top_k
+        )
+        emb_hit = cache.get_embedding(semantic_key + ":emb")
+        resp_hit = cache.get_json(semantic_key + ":resp")
         if emb_hit.hit and resp_hit.hit:
-            mq = mask_entities(qn)
-            cur = emb_svc.encode_texts([mq]).reshape(-1).astype(np.float32)
-            prev = emb_hit.value.reshape(-1).astype(np.float32)
-            if cur.shape == prev.shape:
+            masked_question = mask_entities(normalized_question)
+            current = (
+                emb_svc.encode_texts([masked_question]).reshape(-1).astype(np.float32)
+            )
+            previous = emb_hit.value.reshape(-1).astype(np.float32)
+            if current.shape == previous.shape:
                 sim = float(
-                    np.dot(cur, prev)
-                    / (np.linalg.norm(cur) * np.linalg.norm(prev) + 1e-8)
+                    np.dot(current, previous)
+                    / (np.linalg.norm(current) * np.linalg.norm(previous) + 1e-8)
                 )
                 if sim >= settings.SEMANTIC_CACHE_THRESHOLD:
                     cache_hit = True
-                    dt = (time.perf_counter() - t0) * 1000
+                    latency_ms = (time.perf_counter() - started_at) * 1000
                     logger.info(
                         "ask cache_hit=1 layer=semantic sim=%.3f latency_ms=%.2f",
                         sim,
-                        dt,
+                        latency_ms,
                         extra={
                             "cache_hit": 1,
                             "layer": "semantic",
                             "sim": sim,
-                            "latency_ms": dt,
+                            "latency_ms": latency_ms,
                         },
                     )
                     return AskResponse(**resp_hit.value)
 
-    # 2) Exact final answer cache
     if cache is not None and settings.ENABLE_CACHE:
-        ak = ans_key(scope, pipeline_version, qn, top_k)
-        ans_cached = cache.get_json(ak)
+        answer_key = ans_key(cache_scope, pipeline_version, normalized_question, top_k)
+        ans_cached = cache.get_json(answer_key)
         if ans_cached.hit:
             cache_hit = True
-            dt = (time.perf_counter() - t0) * 1000
+            latency_ms = (time.perf_counter() - started_at) * 1000
             logger.info(
                 "ask cache_hit=1 layer=answer latency_ms=%.2f",
-                dt,
-                extra={"cache_hit": 1, "layer": "answer", "latency_ms": dt},
+                latency_ms,
+                extra={"cache_hit": 1, "layer": "answer", "latency_ms": latency_ms},
             )
             return AskResponse(**ans_cached.value)
 
-    # 3) Query embedding cache
     if cache is not None and settings.ENABLE_CACHE:
-        ek = qemb_key(qn)
-        emb_cached = cache.get_embedding(ek)
+        query_embedding_key = qemb_key(normalized_question)
+        emb_cached = cache.get_embedding(query_embedding_key)
         if emb_cached.hit:
-            q_emb = emb_cached.value.reshape(1, -1)
+            query_embedding = emb_cached.value.reshape(1, -1)
         else:
-            q_emb = emb_svc.encode_texts([qn])
-            cache.set_embedding(ek, q_emb, settings.CACHE_TTL_SECONDS)
+            query_embedding = emb_svc.encode_texts([normalized_question])
+            cache.set_embedding(
+                query_embedding_key,
+                query_embedding,
+                settings.CACHE_TTL_SECONDS,
+            )
     else:
-        q_emb = emb_svc.encode_texts([qn])
+        query_embedding = emb_svc.encode_texts([normalized_question])
 
-    # 4) Retrieval
     retriever = RetrieverService(emb_svc)
     all_hits: list[RetrievedChunk] = []
 
-    for did in doc_ids:
+    for doc_id in doc_ids:
         if cache is not None and settings.ENABLE_CACHE:
-            rk = retr_key(scope, index_version, did, qn, top_k)
-            rc = cache.get_json(rk)
-            if rc.hit:
-                for h in rc.value:
+            retrieval_key = retr_key(
+                cache_scope, index_version, doc_id, normalized_question, top_k
+            )
+            retrieval_cached = cache.get_json(retrieval_key)
+            if retrieval_cached.hit:
+                for hit in retrieval_cached.value:
                     all_hits.append(
                         RetrievedChunk(
-                            doc_id=h["doc_id"],
-                            chunk_id=h["chunk_id"],
-                            score=float(h["score"]),
-                            page=h.get("page"),
-                            chunk_index=h.get("chunk_index"),
-                            text_snippet=h["text_snippet"],
+                            doc_id=hit["doc_id"],
+                            chunk_id=hit["chunk_id"],
+                            score=float(hit["score"]),
+                            page=hit.get("page"),
+                            chunk_index=hit.get("chunk_index"),
+                            text_snippet=hit["text_snippet"],
                         )
                     )
             else:
                 hits = retriever.search(
-                    doc_id=did, query=qn, top_k=top_k, query_emb=q_emb
+                    doc_id=doc_id,
+                    query=normalized_question,
+                    top_k=top_k,
+                    query_emb=query_embedding,
                 )
                 cache.set_json(
-                    rk, [h.__dict__ for h in hits], settings.CACHE_TTL_SECONDS
+                    retrieval_key,
+                    [hit.__dict__ for hit in hits],
+                    settings.CACHE_TTL_SECONDS,
                 )
                 all_hits.extend(hits)
         else:
-            hits = retriever.search(doc_id=did, query=qn, top_k=top_k, query_emb=q_emb)
+            hits = retriever.search(
+                doc_id=doc_id,
+                query=normalized_question,
+                top_k=top_k,
+                query_emb=query_embedding,
+            )
             all_hits.extend(hits)
 
-    all_hits = sorted(all_hits, key=lambda x: x.score, reverse=True)[
+    all_hits = sorted(all_hits, key=lambda hit: hit.score, reverse=True)[
         : max(1, min(top_k, settings.MAX_TOP_K))
     ]
 
-    # 5) QA (original signature!)
-    res = answer_with_sources(question=qn, sources=all_hits, qa=qa_svc)
+    result = answer_with_sources(
+        question=normalized_question, sources=all_hits, qa=qa_svc
+    )
 
-    # 6) NER (fail-soft)
     entities = []
     if ner_svc is not None:
         try:
-            entities = ner_svc.extract_entities(res.answer, res.sources)
+            entities = ner_svc.extract_entities(result.answer, result.sources)
         except Exception:
             entities = []
 
-    sources = [
-        AskSource(
-            doc_id=s.doc_id,
-            page=s.page,
-            chunk_id=s.chunk_id,
-            score=s.score,
-            text_excerpt=s.text_snippet,
-        )
-        for s in res.sources
-    ]
-
     response_obj = AskResponse(
-        answer=res.answer,
-        confidence=res.confidence,
-        sources=sources,
+        answer=result.answer,
+        confidence=result.confidence,
+        sources=[
+            AskSource(
+                doc_id=source.doc_id,
+                page=source.page,
+                chunk_id=source.chunk_id,
+                score=source.score,
+                text_excerpt=source.text_snippet,
+            )
+            for source in result.sources
+        ],
         entities=entities,
     )
 
-    # 7) Store final caches
     if cache is not None and settings.ENABLE_CACHE:
-        ak = ans_key(scope, pipeline_version, qn, top_k)
-        cache.set_json(ak, response_obj.model_dump(), settings.CACHE_TTL_SECONDS)
+        answer_key = ans_key(cache_scope, pipeline_version, normalized_question, top_k)
+        cache.set_json(
+            answer_key, response_obj.model_dump(), settings.CACHE_TTL_SECONDS
+        )
 
         if settings.ENABLE_SEMANTIC_CACHE:
-            mk = sem_key(scope, pipeline_version, qn, top_k)
-            mq = mask_entities(qn)
-            m_emb = emb_svc.encode_texts([mq])
-            cache.set_embedding(mk + ":emb", m_emb, settings.CACHE_TTL_SECONDS)
+            semantic_key = sem_key(
+                cache_scope, pipeline_version, normalized_question, top_k
+            )
+            masked_question = mask_entities(normalized_question)
+            masked_embedding = emb_svc.encode_texts([masked_question])
+            cache.set_embedding(
+                semantic_key + ":emb",
+                masked_embedding,
+                settings.CACHE_TTL_SECONDS,
+            )
             cache.set_json(
-                mk + ":resp", response_obj.model_dump(), settings.CACHE_TTL_SECONDS
+                semantic_key + ":resp",
+                response_obj.model_dump(),
+                settings.CACHE_TTL_SECONDS,
             )
 
-    dt = (time.perf_counter() - t0) * 1000
+    latency_ms = (time.perf_counter() - started_at) * 1000
     logger.info(
         "ask cache_hit=%d latency_ms=%.2f",
         1 if cache_hit else 0,
-        dt,
-        extra={"cache_hit": 1 if cache_hit else 0, "latency_ms": dt},
+        latency_ms,
+        extra={"cache_hit": 1 if cache_hit else 0, "latency_ms": latency_ms},
     )
     return response_obj

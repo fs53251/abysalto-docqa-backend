@@ -2,24 +2,29 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator, Any
+from typing import Any, Callable, Iterator
 
 import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 
-from app.core.config import settings
-from app.main import app
-
-# We override these dependency providers:
 from app.api.deps import (
     get_embedding_service,
-    get_qa_service,
-    get_optional_ner_service,
     get_optional_cache,
+    get_optional_ner_service,
+    get_qa_service,
 )
-
-# --------- Default lightweight test doubles ---------
+from app.core.config import settings
+from app.core.identifiers import (
+    document_public_id,
+    generate_document_id,
+    parse_document_public_id,
+)
+from app.core.security.session import load_session_cookie
+from app.db.base import Base
+from app.db.session import get_engine, get_sessionmaker
+from app.main import app
+from app.repositories.documents import create_document
 
 
 class DummyEmbeddingService:
@@ -27,10 +32,9 @@ class DummyEmbeddingService:
         return
 
     def encode_texts(self, texts: list[str]) -> np.ndarray:
-        # deterministic 3-dim vector per text
         out = np.zeros((len(texts), 3), dtype=np.float32)
-        for i, t in enumerate(texts):
-            out[i, 0] = float(len(t))
+        for index, text in enumerate(texts):
+            out[index, 0] = float(len(text))
         return out
 
 
@@ -41,7 +45,6 @@ class DummyQAService:
         return
 
     def answer(self, question: str, context: str):
-        # minimal QaResult-like shape used downstream
         from app.services.interfaces import QaResult
 
         return QaResult(answer="dummy", score=0.99)
@@ -49,32 +52,48 @@ class DummyQAService:
 
 @dataclass
 class TestServices:
-    """
-    A mutable container. Tests can override these fields without touching app.state.
-    """
-
     embedding: Any
     qa: Any
     ner: Any | None = None
     cache: Any | None = None
 
 
+@dataclass(frozen=True)
+class SessionOwnedDocument:
+    doc_id: str
+    session_id: str
+
+
 @pytest.fixture(autouse=True)
 def _set_test_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    """
-    Force deterministic settings for tests.
-    Also ensures factories skip heavy model loading (APP_ENV == test).
-    """
     monkeypatch.setattr(settings, "APP_ENV", "test", raising=False)
     monkeypatch.setattr(settings, "ENABLE_CACHE", False, raising=False)
     yield
 
 
+@pytest.fixture(autouse=True)
+def _isolate_test_database(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> Iterator[None]:
+    sqlite_url = f"sqlite:///{tmp_path / 'app.db'}"
+
+    import app.db.session as db_session_module
+
+    monkeypatch.setattr(settings, "DATABASE_URL", sqlite_url, raising=False)
+    db_session_module._engine = None
+    db_session_module._SessionLocal = None
+
+    Base.metadata.create_all(bind=get_engine())
+
+    yield
+
+    db_session_module._engine = None
+    db_session_module._SessionLocal = None
+
+
 @pytest.fixture()
 def temp_data_dir(tmp_path: Path) -> Iterator[Path]:
-    """
-    Use an isolated DATA_DIR for tests.
-    """
     old = settings.DATA_DIR
     settings.DATA_DIR = str(tmp_path)
     (tmp_path / "uploads").mkdir(parents=True, exist_ok=True)
@@ -85,13 +104,6 @@ def temp_data_dir(tmp_path: Path) -> Iterator[Path]:
 
 @pytest.fixture()
 def services() -> TestServices:
-    """
-    Default services for tests (fast, no heavy ML loads).
-    Individual tests can mutate:
-      services.embedding = CustomEmb()
-      services.qa = CustomQA()
-      services.cache = FakeCache()
-    """
     return TestServices(
         embedding=DummyEmbeddingService(),
         qa=DummyQAService(),
@@ -102,11 +114,6 @@ def services() -> TestServices:
 
 @pytest.fixture()
 def client(services: TestServices) -> Iterator[TestClient]:
-    """
-    TestClient that uses FastAPI dependency overrides,
-    so tests do NOT depend on app.state.
-    """
-    # Set dependency overrides
     app.dependency_overrides[get_embedding_service] = lambda: services.embedding
     app.dependency_overrides[get_qa_service] = lambda: services.qa
     app.dependency_overrides[get_optional_ner_service] = lambda: services.ner
@@ -115,5 +122,66 @@ def client(services: TestServices) -> Iterator[TestClient]:
     with TestClient(app) as c:
         yield c
 
-    # Cleanup
     app.dependency_overrides.clear()
+
+
+@pytest.fixture()
+def session_id_for_client() -> Callable[[TestClient], str]:
+    def _session_id_for_client(client: TestClient) -> str:
+        client.get("/documents")
+        signed_cookie = client.cookies.get(settings.SESSION_COOKIE_NAME)
+        assert signed_cookie is not None
+        session_id = load_session_cookie(signed_cookie)
+        assert session_id is not None
+        return session_id
+
+    return _session_id_for_client
+
+
+@pytest.fixture()
+def create_owned_document(
+    temp_data_dir: Path,
+    session_id_for_client: Callable[[TestClient], str],
+) -> Callable[..., SessionOwnedDocument]:
+    def _create_owned_document(
+        client: TestClient,
+        *,
+        doc_id: str | None = None,
+        filename: str = "test.pdf",
+        content_type: str = "application/pdf",
+        status: str = "uploaded",
+        stored_path: str | None = None,
+    ) -> SessionOwnedDocument:
+        session_id = session_id_for_client(client)
+        document_uuid = (
+            generate_document_id()
+            if doc_id is None
+            else parse_document_public_id(doc_id)
+        )
+        public_doc_id = document_public_id(document_uuid)
+        if stored_path is None:
+            stored_path = str(
+                temp_data_dir / "uploads" / public_doc_id / "original" / filename
+            )
+        path = Path(stored_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.touch(exist_ok=True)
+
+        session_local = get_sessionmaker()
+        db = session_local()
+        try:
+            create_document(
+                db,
+                doc_id=document_uuid,
+                filename=filename,
+                content_type=content_type,
+                stored_path=str(path),
+                owner_session_id=session_id,
+                status=status,
+            )
+        finally:
+            db.close()
+
+        return SessionOwnedDocument(doc_id=public_doc_id, session_id=session_id)
+
+    return _create_owned_document
