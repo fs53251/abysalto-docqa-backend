@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.routes.ask import router as ask_router
@@ -25,6 +26,7 @@ from app.core.exception_handlers import (
 )
 from app.core.logging import configure_logging
 from app.core.middleware.request_id import RequestIdMiddleware
+from app.core.middleware.security_headers import SecurityHeadersMiddleware
 from app.core.middleware.session_identity import SessionIdentityMiddleware
 from app.services.factories import init_app_services
 
@@ -34,12 +36,10 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Initialize huggingface token
     if settings.HF_TOKEN:
         os.environ["HF_TOKEN"] = settings.HF_TOKEN
         os.environ["HUGGINGFACEHUB_API_TOKEN"] = settings.HF_TOKEN
 
-    # DB init (fail-soft)
     try:
         from app.db.session import init_db_dev_failsafe
 
@@ -50,7 +50,6 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.exception("DB init failed: %s", e)
 
-    # All services initialization (fail-soft per service)
     init_app_services(app)
 
     yield
@@ -58,11 +57,19 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title=settings.APP_NAME, lifespan=lifespan)
 
-# Middlewares
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=list(settings.CORS_ALLOW_ORIGINS),
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Request-Id"],
+    expose_headers=["X-Request-Id", "Retry-After"],
+)
+
 app.add_middleware(RequestIdMiddleware)
 app.add_middleware(SessionIdentityMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
 
-# Routes
 app.include_router(health_router)
 app.include_router(auth_router)
 app.include_router(upload_router)
@@ -73,7 +80,6 @@ app.include_router(embeddings_router)
 app.include_router(vectorstore_router)
 app.include_router(ask_router)
 
-# Exception handlers
 app.add_exception_handler(StarletteHTTPException, http_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_exception_handler(DomainError, domain_exception_handler)

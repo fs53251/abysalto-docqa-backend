@@ -13,6 +13,7 @@ from fastapi import Depends, Request
 from app.api.deps import CurrentIdentity, get_optional_redis_client
 from app.core.config import settings
 from app.core.errors import ApiError
+from app.core.network import get_client_ip
 from app.core.identity import RequestIdentity
 from app.services.interfaces import RedisClientPort
 
@@ -35,13 +36,6 @@ async def _maybe_await(value: str | Awaitable[str]) -> str:
     if inspect.isawaitable(value):
         return str(await value)
     return str(value)
-
-
-def _client_ip(request: Request) -> str:
-    client = request.client
-    if client is None or not client.host:
-        return "unknown"
-    return client.host
 
 
 class RedisRateLimiter:
@@ -101,7 +95,7 @@ def login_rate_limit_key(namespace: str = "login") -> RateLimitKeyFn:
             if email
             else "unknown"
         )
-        return f"{namespace}:{_client_ip(request)}:{email_hash}"
+        return f"{namespace}:{get_client_ip(request)}:{email_hash}"
 
     return _key
 

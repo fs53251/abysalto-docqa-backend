@@ -22,15 +22,28 @@ class Settings(BaseSettings):
     CACHE_ROOT: str | None = None
 
     JWT_SECRET: str = "e802c66c7ac92c1ab9ac994e41aa9923353d1283ae5129f9ce30a12245e63026"
+    SESSION_COOKIE_SECRET: str = (
+        "4e1dba6937f23b741e9cbf8796a4d4f1f04f4d0dbd47d7a4f7f5a5a9b1ef82ac"
+    )
     JWT_ALGORITHM: str = "HS256"
     JWT_EXP_MIN: int = 60
     PASSWORD_MIN_LENGTH: int = 8
 
     SESSION_COOKIE_NAME: str = "docqa_session"
-    SESSION_COOKIE_SECRET: str | None = None
     SESSION_TTL_DAYS: int = 7
 
     DATABASE_URL: str = "sqlite:///./data/app.db"
+
+    CORS_ALLOW_ORIGINS: tuple[str, ...] = (
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:8501",
+        "http://127.0.0.1:8501",
+    )
+    TRUSTED_PROXIES: tuple[str, ...] = (
+        "127.0.0.1",
+        "::1",
+    )
 
     MAX_UPLOAD_MB: int = 25
     MAX_FILES_PER_REQUEST: int = 10
