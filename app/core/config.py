@@ -113,6 +113,8 @@ class Settings(BaseSettings):
     UPLOAD_RATE_LIMIT_PER_MIN: int = 10
     LOGIN_RATE_LIMIT_PER_MIN: int = 10
 
+    HEALTH_READY_REQUIRED_SERVICES: tuple[str, ...] = ("embedding", "qa", "ner")
+
 
 settings = Settings()
 
@@ -135,3 +137,8 @@ def cache_root() -> Path:
 
 def processed_root() -> Path:
     return data_root() / "processed"
+
+
+def ensure_runtime_dirs() -> None:
+    for path in (data_root(), upload_root(), processed_root(), cache_root()):
+        path.mkdir(parents=True, exist_ok=True)

@@ -12,14 +12,15 @@ Backend service for document ingestion and grounded Q&A, built with FastAPI and 
 - document ownership, listing, detail inspection and deletion
 - caching, rate limiting and structured error responses
 - Streamlit demo UI for showcasing the full product flow
+- Docker + Compose setup for API, Redis and Postgres
 
-## Requirements
+## Local development
+
+Requirements:
 
 - Python 3.12+
 - Poetry
 - Redis
-
-## Setup
 
 Install dependencies:
 

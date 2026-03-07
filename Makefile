@@ -1,4 +1,4 @@
-.PHONY: install run run-ui test lint format check clean redis-start redis-stop
+.PHONY: install run run-ui test lint format check clean redis-start redis-stop docker-up docker-up-build docker-down docker-logs docker-ps
 
 install:
 	poetry install
@@ -36,3 +36,18 @@ redis-start:
 redis-stop:
 	@echo "Stopping Redis..."
 	@redis-cli shutdown || true
+
+docker-up:
+	docker compose up -d
+
+docker-up-build:
+	docker compose up --build -d
+
+docker-down:
+	docker compose down
+
+docker-logs:
+	docker compose logs -f api ui db redis
+
+docker-ps:
+	docker compose ps

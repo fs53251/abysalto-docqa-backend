@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Generator
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import settings
@@ -24,7 +24,9 @@ def get_sessionmaker():
     global _SessionLocal
     if _SessionLocal is None:
         _SessionLocal = sessionmaker(
-            autocommit=False, autoflush=False, bind=get_engine()
+            autocommit=False,
+            autoflush=False,
+            bind=get_engine(),
         )
 
     return _SessionLocal
@@ -37,6 +39,11 @@ def get_db() -> Generator[Session, None, None]:
         yield db
     finally:
         db.close()
+
+
+def check_db_connection() -> None:
+    with get_engine().connect() as conn:
+        conn.execute(text("SELECT 1"))
 
 
 def init_db_dev_failsafe() -> None:

@@ -16,7 +16,7 @@ from app.api.routes.extract import router as extract_router
 from app.api.routes.health import router as health_router
 from app.api.routes.upload import router as upload_router
 from app.api.routes.vectorstore import router as vectorstore_router
-from app.core.config import settings
+from app.core.config import ensure_runtime_dirs, settings
 from app.core.errors import DomainError
 from app.core.exception_handlers import (
     domain_exception_handler,
@@ -40,6 +40,8 @@ async def lifespan(app: FastAPI):
     if settings.HF_TOKEN:
         os.environ["HF_TOKEN"] = settings.HF_TOKEN
         os.environ["HUGGINGFACEHUB_API_TOKEN"] = settings.HF_TOKEN
+
+    ensure_runtime_dirs()
 
     try:
         from app.db.session import init_db_dev_failsafe
