@@ -109,7 +109,7 @@ def write_chunks_and_embeddings(temp_data_dir: Path, doc_id: str):
     )
 
 
-def test_ask_happy_path_with_index_returns_filename(
+def test_ask_happy_path_with_index_returns_filename_and_scores(
     client: TestClient,
     services,
     temp_data_dir: Path,
@@ -117,12 +117,13 @@ def test_ask_happy_path_with_index_returns_filename(
     create_owned_document,
 ):
     doc_id = uuid.uuid4().hex
-    create_owned_document(client, doc_id=doc_id, filename="integration-doc.pdf")
+    create_owned_document(
+        client, doc_id=doc_id, filename="integration-doc.pdf", status="indexed"
+    )
     write_chunks_and_embeddings(temp_data_dir, doc_id)
 
     services.embedding = DummyEmbeddingService()
     services.qa = DummyQAService()
-
     monkeypatch.setattr(
         services.embedding,
         "encode_texts",
@@ -145,7 +146,9 @@ def test_ask_happy_path_with_index_returns_filename(
 
     data = ask_response.json()
     assert data["answer"] == "INTEGRATION ANSWER"
+    assert data["grounded"] is True
     assert len(data["sources"]) == 1
     assert data["sources"][0]["doc_id"] == doc_id
     assert data["sources"][0]["filename"] == "integration-doc.pdf"
     assert data["sources"][0]["chunk_id"] == "chunk_a"
+    assert data["sources"][0]["semantic_score"] is not None

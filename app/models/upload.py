@@ -1,4 +1,6 @@
-from typing import Literal, Optional
+from __future__ import annotations
+
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -6,14 +8,16 @@ from pydantic import BaseModel
 class UploadItemResponse(BaseModel):
     filename: str
     status: str
+    status_detail: str | None = None
+    ready_to_ask: bool = False
 
-    doc_id: Optional[str] = None
-    content_type: Optional[str] = None
-    size_bytes: Optional[int] = None
-    sha256: Optional[str] = None
-    owner_type: Optional[Literal["user", "session"]] = None
+    doc_id: str | None = None
+    content_type: str | None = None
+    size_bytes: int | None = None
+    sha256: str | None = None
+    owner_type: Literal["user", "session"] | None = None
 
-    error_detail: Optional[str] = None
+    error_detail: str | None = None
 
 
 class UploadResponse(BaseModel):

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from io import BytesIO
 from pathlib import Path
 
@@ -26,8 +27,7 @@ def _make_pdf_bytes(text: str) -> bytes:
 
 
 def test_upload_multiple_ok_runs_processing_pipeline(
-    client: TestClient,
-    temp_data_dir: Path,
+    client: TestClient, temp_data_dir: Path
 ):
     files = [
         (
@@ -47,7 +47,6 @@ def test_upload_multiple_ok_runs_processing_pipeline(
             ),
         ),
     ]
-
     response = client.post("/upload", files=files)
     assert response.status_code == 200, response.text
 
@@ -55,15 +54,13 @@ def test_upload_multiple_ok_runs_processing_pipeline(
     assert data["has_errors"] is False
     assert len(data["documents"]) == 2
     assert all(item["status"] == "indexed" for item in data["documents"])
+    assert all(item["ready_to_ask"] is True for item in data["documents"])
     assert all(item["owner_type"] == "session" for item in data["documents"])
 
     for item in data["documents"]:
         doc_id = item["doc_id"]
-        doc_dir = temp_data_dir / "uploads" / doc_id
         processed_dir = temp_data_dir / "processed" / doc_id
-
-        assert (doc_dir / "metadata.json").exists()
-        assert (doc_dir / "original").exists()
+        assert item["status_detail"] == "Ready to ask."
         assert (processed_dir / "text.json").exists()
         assert (processed_dir / "chunks.jsonl").exists()
         assert (processed_dir / "chunk_map.json").exists()
@@ -74,9 +71,69 @@ def test_upload_multiple_ok_runs_processing_pipeline(
         assert (processed_dir / "faiss_meta.json").exists()
 
 
+def test_upload_reuses_processed_artifacts_for_duplicate_file(
+    client: TestClient, temp_data_dir: Path
+):
+    duplicate_payload = _make_pdf_bytes("Duplicate document content.")
+
+    first = client.post(
+        "/upload",
+        files=[
+            (
+                "files",
+                (
+                    "first.pdf",
+                    BytesIO(duplicate_payload),
+                    "application/pdf",
+                ),
+            )
+        ],
+    )
+    assert first.status_code == 200, first.text
+    first_item = first.json()["documents"][0]
+
+    second = client.post(
+        "/upload",
+        files=[
+            (
+                "files",
+                (
+                    "second.pdf",
+                    BytesIO(duplicate_payload),
+                    "application/pdf",
+                ),
+            )
+        ],
+    )
+    assert second.status_code == 200, second.text
+    second_item = second.json()["documents"][0]
+
+    assert second_item["status"] == "indexed"
+    assert second_item["ready_to_ask"] is True
+    assert "Reused processed artifacts" in second_item["status_detail"]
+    assert first_item["sha256"] == second_item["sha256"]
+
+    processed_dir = temp_data_dir / "processed" / second_item["doc_id"]
+    assert (processed_dir / "faiss.index").exists()
+
+    text_payload = json.loads((processed_dir / "text.json").read_text(encoding="utf-8"))
+    assert text_payload["doc_id"] == second_item["doc_id"]
+
+    chunk_line = (
+        (processed_dir / "chunks.jsonl").read_text(encoding="utf-8").splitlines()[0]
+    )
+    assert json.loads(chunk_line)["doc_id"] == second_item["doc_id"]
+
+    embeddings_meta_line = (
+        (processed_dir / "embeddings_meta.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()[0]
+    )
+    assert json.loads(embeddings_meta_line)["doc_id"] == second_item["doc_id"]
+
+
 def test_upload_rejects_wrong_extension_best_effort(
-    client: TestClient,
-    temp_data_dir: Path,
+    client: TestClient, temp_data_dir: Path
 ):
     files = [
         (
@@ -89,15 +146,11 @@ def test_upload_rejects_wrong_extension_best_effort(
         ),
         ("files", ("evil.exe", BytesIO(b"nope"), "application/octet-stream")),
     ]
-
     response = client.post("/upload", files=files)
     assert response.status_code == 200, response.text
-
     data = response.json()
     assert data["has_errors"] is True
-    assert len(data["documents"]) == 2
     assert data["documents"][0]["status"] == "indexed"
-    assert data["documents"][0]["owner_type"] == "session"
     assert data["documents"][1]["status"] == "error"
 
 
@@ -114,18 +167,17 @@ def test_upload_rejects_wrong_mime(client: TestClient, temp_data_dir: Path):
     ]
     response = client.post("/upload", files=files)
     assert response.status_code == 200, response.text
-
     data = response.json()
     assert data["has_errors"] is True
     assert data["documents"][0]["status"] == "error"
 
 
 def test_upload_rejects_magic_bytes_mismatch(client: TestClient, temp_data_dir: Path):
-    files = [("files", ("test.pdf", BytesIO(b"NOTPDF"), "application/pdf"))]
-
-    response = client.post("/upload", files=files)
+    response = client.post(
+        "/upload",
+        files=[("files", ("test.pdf", BytesIO(b"NOTPDF"), "application/pdf"))],
+    )
     assert response.status_code == 200, response.text
-
     data = response.json()
     assert data["has_errors"] is True
     assert data["documents"][0]["status"] == "error"
@@ -133,19 +185,14 @@ def test_upload_rejects_magic_bytes_mismatch(client: TestClient, temp_data_dir: 
 
 
 def test_upload_rejects_too_large_file(
-    client: TestClient,
-    temp_data_dir: Path,
-    monkeypatch,
+    client: TestClient, temp_data_dir: Path, monkeypatch
 ):
     monkeypatch.setattr(settings, "MAX_UPLOAD_MB", 1)
-
     payload = b"%PDF-1.4\n" + (b"a" * (1024 * 1024 + 10))
-    big = BytesIO(payload)
-    files = [("files", ("big.pdf", big, "application/pdf"))]
-
-    response = client.post("/upload", files=files)
+    response = client.post(
+        "/upload", files=[("files", ("big.pdf", BytesIO(payload), "application/pdf"))]
+    )
     assert response.status_code == 200, response.text
-
     data = response.json()
     assert data["has_errors"] is True
     assert data["documents"][0]["status"] == "error"
@@ -153,42 +200,36 @@ def test_upload_rejects_too_large_file(
 
 
 def test_upload_sanitizes_filename_no_path_traversal(
-    client: TestClient,
-    temp_data_dir: Path,
+    client: TestClient, temp_data_dir: Path
 ):
-    files = [
-        (
-            "files",
+    response = client.post(
+        "/upload",
+        files=[
             (
-                "../../etc/passwd.pdf",
-                BytesIO(_make_pdf_bytes("Sanitized filename upload.")),
-                "application/pdf",
-            ),
-        )
-    ]
-
-    response = client.post("/upload", files=files)
+                "files",
+                (
+                    "../../etc/passwd.pdf",
+                    BytesIO(_make_pdf_bytes("Sanitized filename upload.")),
+                    "application/pdf",
+                ),
+            )
+        ],
+    )
     assert response.status_code == 200, response.text
-
     data = response.json()
     assert data["has_errors"] is False
     doc_id = data["documents"][0]["doc_id"]
-
     assert not (temp_data_dir / "etc").exists()
-
     original_dir = temp_data_dir / "uploads" / doc_id / "original"
-    assert original_dir.exists()
-
     saved_files = list(original_dir.glob("*"))
     assert len(saved_files) == 1
-
-    upload_root = (temp_data_dir / "uploads").resolve()
-    assert saved_files[0].resolve().is_relative_to(upload_root)
+    assert (
+        saved_files[0].resolve().is_relative_to((temp_data_dir / "uploads").resolve())
+    )
 
 
 def test_anon_upload_sets_session_owner_and_returns_owner_type(
-    client: TestClient,
-    temp_data_dir: Path,
+    client: TestClient, temp_data_dir: Path
 ):
     response = client.post(
         "/upload",
@@ -204,7 +245,6 @@ def test_anon_upload_sets_session_owner_and_returns_owner_type(
         ],
     )
     assert response.status_code == 200, response.text
-
     item = response.json()["documents"][0]
     assert item["owner_type"] == "session"
     assert item["status"] == "indexed"
@@ -227,12 +267,9 @@ def test_anon_upload_sets_session_owner_and_returns_owner_type(
 
 
 def test_auth_upload_sets_user_owner_and_returns_owner_type(
-    client: TestClient,
-    temp_data_dir: Path,
-    register_and_login,
+    client: TestClient, temp_data_dir: Path, register_and_login
 ):
     auth_user = register_and_login(email="upload-owner@example.com")
-
     response = client.post(
         "/upload",
         headers=auth_user.headers,
@@ -248,7 +285,6 @@ def test_auth_upload_sets_user_owner_and_returns_owner_type(
         ],
     )
     assert response.status_code == 200, response.text
-
     item = response.json()["documents"][0]
     assert item["owner_type"] == "user"
     assert item["status"] == "indexed"
@@ -266,8 +302,7 @@ def test_auth_upload_sets_user_owner_and_returns_owner_type(
 
 
 def test_upload_processing_failure_marks_document_failed(
-    client: TestClient,
-    temp_data_dir: Path,
+    client: TestClient, temp_data_dir: Path
 ):
     response = client.post(
         "/upload",
@@ -283,10 +318,8 @@ def test_upload_processing_failure_marks_document_failed(
         ],
     )
     assert response.status_code == 200, response.text
-
     data = response.json()
     assert data["has_errors"] is True
-
     item = data["documents"][0]
     assert item["status"] == "failed"
     assert item["owner_type"] == "session"

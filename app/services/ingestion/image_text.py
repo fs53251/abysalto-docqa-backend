@@ -1,9 +1,12 @@
+from __future__ import annotations
+
 import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from app.services.ingestion.ocr import ocr_image_bytes
+from app.services.ingestion.pdf_text import normalize_text
 from app.storage.files import ensure_dir
 from app.storage.processed import get_text_json_path
 
@@ -18,8 +21,11 @@ class ExtractedImageText:
 def extract_image_text(*, doc_id: str, image_path: Path) -> ExtractedImageText:
     image_bytes = image_path.read_bytes()
     ocr = ocr_image_bytes(image_bytes)
-
-    return ExtractedImageText(doc_id=doc_id, text=ocr.text, confidence=ocr.confidence)
+    return ExtractedImageText(
+        doc_id=doc_id,
+        text=normalize_text(ocr.text),
+        confidence=ocr.confidence,
+    )
 
 
 def save_image_text_json(extracted: ExtractedImageText) -> Path:
@@ -40,9 +46,7 @@ def save_image_text_json(extracted: ExtractedImageText) -> Path:
             }
         ],
     }
-
     out_path.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
     )
-
     return out_path

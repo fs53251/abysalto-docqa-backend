@@ -24,5 +24,3 @@ Requirements:
 
 Install dependencies:
 
-```bash
-poetry install

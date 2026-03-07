@@ -40,10 +40,7 @@ class Settings(BaseSettings):
         "http://localhost:8501",
         "http://127.0.0.1:8501",
     )
-    TRUSTED_PROXIES: tuple[str, ...] = (
-        "127.0.0.1",
-        "::1",
-    )
+    TRUSTED_PROXIES: tuple[str, ...] = ("127.0.0.1", "::1")
 
     MAX_UPLOAD_MB: int = 25
     MAX_FILES_PER_REQUEST: int = 10
@@ -63,7 +60,6 @@ class Settings(BaseSettings):
     )
     UPLOAD_AUTO_PROCESS: bool = True
     UPLOAD_PROCESSING_MODE: Literal["sync", "background"] = "sync"
-
     ENABLE_DEDUP: bool = True
 
     MAX_PDF_PAGES: int = 250
@@ -74,12 +70,13 @@ class Settings(BaseSettings):
     OCR_FALLBACK_ENABLED: bool = True
     OCR_DPI: int = 200
     MAX_OCR_PAGES: int = 250
-    MAX_IMAGE_PIXELS: int = 20000000
+    MAX_IMAGE_PIXELS: int = 20_000_000
 
-    CHUNK_SIZE_CHARS: int = 1000
-    CHUNK_OVERLAP_CHARS: int = 200
+    CHUNK_SIZE_CHARS: int = 1100
+    CHUNK_OVERLAP_CHARS: int = 180
     MAX_CHUNKS_PER_DOC: int = 5000
     CHUNK_SEPARATORS: tuple[str, ...] = ("\n\n", "\n", ". ", " ", "")
+    CHUNK_MIN_CHARS: int = 180
 
     EMBEDDING_MODEL_NAME: str = "sentence-transformers/all-MiniLM-L6-v2"
     EMBEDDING_BATCH_SIZE: int = 64
@@ -88,10 +85,18 @@ class Settings(BaseSettings):
 
     DEFAULT_TOP_K: int = 5
     MAX_TOP_K: int = 20
+    RETRIEVAL_CANDIDATE_MULTIPLIER: int = 4
+    RETRIEVAL_EXCERPT_CHARS: int = 420
+    RETRIEVAL_MAX_SENTENCES_PER_CHUNK: int = 3
+    RETRIEVAL_MIN_LEXICAL_SCORE: float = 0.05
 
     QA_MODEL_NAME: str = "distilbert-base-cased-distilled-squad"
     QA_MAX_CONTENT_CHARS: int = 4000
-    QA_MIN_SCORE: float = 0.15
+    QA_MIN_SCORE: float = 0.18
+    QA_EXTRACTIVE_DOC_LIMIT: int = 2
+    QA_MIN_EVIDENCE_SCORE: float = 0.20
+    QA_MAX_EVIDENCE_SENTENCES: int = 5
+    QA_MIN_ANSWER_CHARS: int = 3
 
     MAX_QUESTION_LEN: int = 2000
     MAX_QUESTION_CHARS: int = Field(default=2000, validation_alias="MAX_QUESTION_LEN")

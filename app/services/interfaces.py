@@ -31,7 +31,9 @@ class NerServicePort(Protocol):
     model_name: str
 
     def load(self) -> None: ...
-    def extract(self, text: str) -> list[dict[str, Any]]: ...
+    def extract_entities(
+        self, answer: str, sources: list[Any]
+    ) -> list[dict[str, Any]]: ...
 
 
 @dataclass(frozen=True)
