@@ -1,10 +1,13 @@
-.PHONY: install run test lint format check clean redis-start redis-stop
+.PHONY: install run run-ui test lint format check clean redis-start redis-stop
 
 install:
 	poetry install
 
 run: redis-start
 	poetry run uvicorn app.main:app --reload
+
+run-ui:
+	poetry run streamlit run ui/streamlit_app.py
 
 test: redis-start
 	poetry run pytest
