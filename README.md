@@ -120,10 +120,6 @@ The goal was not to build a single demo endpoint, but a **small production-style
   <img src="docs/assets/screenshots/03-documents-panel.svg" alt="Documents panel" width="48%" />
   <img src="docs/assets/screenshots/04-ask-response.svg" alt="Ask response" width="48%" />
 </div>
-<div align="center">
-  <img src="docs/assets/screenshots/05-api-docs.svg" alt="Swagger UI" width="48%" />
-  <img src="docs/assets/screenshots/06-docker-health.svg" alt="Docker and health checks" width="48%" />
-</div>
 
 ---
 
