@@ -108,7 +108,7 @@ The goal was not to build a single demo endpoint, but a **small production-style
 
 ## Demo preview
 
-> The README now includes a bundled demo video and a generated poster frame from the recording below. Click the preview image to open the `.webm` demo file.
+> Click the preview image to open the `.webm` demo file.
 
 [![Demo video thumbnail](docs/assets/demo/demo-thumbnail.png)](docs/assets/demo/demo-video.webm)
 
