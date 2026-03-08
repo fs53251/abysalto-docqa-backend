@@ -730,61 +730,30 @@ Example readiness response:
 
 ---
 
-## UI walkthrough
-
-The Streamlit UI is designed as a simple but polished demo workspace.
-
-### What you can show in a live demo
-
-1. Open the workspace at `http://localhost:8501`
-2. Upload a PDF or image from `data/test_docs/`
-3. Show that the document becomes ready to ask over
-4. Ask a concrete question such as:
-   - `Who is the invoice issuer?`
-   - `What is the total amount?`
-   - `What is the due date?`
-5. Show the answer, confidence, entities, and source excerpts
-6. Open Swagger at `http://localhost:8000/docs` to prove the API contract
-
-### Screenshot sections ready for real images
-
 #### 1. Workspace overview
 
 ![Workspace overview](docs/assets/screenshots/01-workspace-overview.svg)
 
-*Suggested capture:* the Streamlit landing state with sidebar, upload panel, and document workspace visible.
+The Streamlit landing state with sidebar, upload panel, and document workspace visible.
 
 #### 2. Upload result
 
 ![Upload result](docs/assets/screenshots/02-upload-result.svg)
 
-*Suggested capture:* a successful upload with `indexed` status and a visible `doc_id`.
+ Successful upload with `indexed` status.
 
 #### 3. Documents panel
 
 ![Documents panel](docs/assets/screenshots/03-documents-panel.svg)
 
-*Suggested capture:* the list of owned documents with page count, chunk count, and readiness state.
+The list of owned documents with page count, chunk count, and readiness state.
 
 #### 4. Ask response
 
 ![Ask response](docs/assets/screenshots/04-ask-response.svg)
 
-*Suggested capture:* a question, grounded answer, source snippets, and entities.
+*A question, grounded answer, source snippets, and entities.
 
-#### 5. API docs
-
-![Swagger / ReDoc](docs/assets/screenshots/05-api-docs.svg)
-
-*Suggested capture:* `/docs` with `POST /upload` and `POST /ask` expanded.
-
-#### 6. Docker health / readiness
-
-![Docker health and readiness](docs/assets/screenshots/06-docker-health.svg)
-
-*Suggested capture:* `docker compose ps` plus `/health/ready` returning `ready: true`.
-
----
 
 ## Testing and quality
 
@@ -823,155 +792,3 @@ It currently runs:
 - Pytest suite
 
 ---
-
-## How to record and embed a demo video
-
-### Recommended demo structure (60–90 seconds)
-
-1. Show the repository and README briefly
-2. Start the stack with `docker compose up --build`
-3. Open Streamlit UI
-4. Upload `northwind_invoice_scanned.pdf`
-5. Ask 2–3 good questions
-6. Open Swagger docs
-7. Show `/health/ready`
-8. End on the message that the whole stack is Dockerized and reproducible
-
-### Recommended assets to create
-
-- **1 full video** for YouTube, Loom, or GitHub release assets
-- **1 short GIF** of the UI in action for the README hero section
-- **6 screenshots** matching the filenames already referenced in this README
-
-### Suggested file locations
-
-```text
-docs/assets/demo/demo-thumbnail.png
-docs/assets/demo/demo.gif
-docs/assets/screenshots/01-workspace-overview.png
-docs/assets/screenshots/02-upload-result.png
-docs/assets/screenshots/03-documents-panel.png
-docs/assets/screenshots/04-ask-response.png
-docs/assets/screenshots/05-api-docs.png
-docs/assets/screenshots/06-docker-health.png
-```
-
-### Fast recording recipe
-
-#### Option A — OBS Studio
-
-- Record the browser or desktop at 1080p
-- Use 125% browser zoom so text is readable on GitHub or YouTube
-- Keep the mouse movement slow and intentional
-- Avoid long waits by preloading models first
-
-#### Option B — Screen Studio / Loom / CleanShot
-
-- Good for polished cursor movement and quick sharing
-- Export MP4 for the full video
-- Export GIF for the short README preview
-
-### Convert video to a short GIF with `ffmpeg`
-
-```bash
-ffmpeg -ss 00:00:05 -t 00:00:08 -i demo.mp4 \
-  -vf "fps=12,scale=1440:-1:flags=lanczos" \
-  docs/assets/demo/demo.gif
-```
-
-### Generate a thumbnail image from the video
-
-```bash
-ffmpeg -ss 00:00:06 -i demo.mp4 -vframes 1 docs/assets/demo/demo-thumbnail.png
-```
-
-### Replace the placeholder thumbnail link in this README
-
-Use this block once your video is uploaded:
-
-```md
-[![Demo video thumbnail](docs/assets/demo/demo-thumbnail.png)](https://your-video-url-here)
-```
-
-### Pro tip
-
-Use the exact filenames already referenced by this README. Then you only replace files, not markdown.
-
----
-
-## Troubleshooting
-
-### The first startup is slow
-
-That is expected if embeddings, EasyOCR, or spaCy models are downloading for the first time. To reduce live-demo latency:
-
-```bash
-poetry run python scripts/preload_models.py
-```
-
-### Redis connection errors in manual mode
-
-Make sure Redis is running locally:
-
-```bash
-redis-cli ping
-```
-
-Expected output:
-
-```text
-PONG
-```
-
-### Docker containers are up but the UI is not ready yet
-
-Check service health and logs:
-
-```bash
-docker compose ps
-docker compose logs -f api ui db redis
-```
-
-### OpenAI is not configured
-
-That is okay. The application still works in fallback mode when `QA_USE_OPENAI=false`.
-
----
-
-## What this final Dockerized project gives you
-
-Once the project is Dockerized and running, you have a reproducible local stack that you can:
-
-- demo to a mentor, recruiter, or reviewer
-- publish to GitHub as a polished backend portfolio project
-- extend into a more advanced document-QA product
-- use as a base for worker queues, cloud storage, better observability, or deployment to a cloud platform
-
-In practical terms, the Dockerized version means:
-
-- the environment is reproducible
-- onboarding is faster
-- the service is easier to test end-to-end
-- the repo looks and behaves like a real software project, not just a notebook or script
-
----
-
-## Roadmap
-
-High-value next steps would be:
-
-- background job workers for ingestion/indexing
-- S3-compatible object storage
-- pgvector or managed vector database support
-- richer access-control policies
-- async document processing queue
-- observability stack with metrics and tracing
-- deployment profiles for Railway / Render / ECS / Kubernetes
-
----
-
-## Final note
-
-This README is intentionally written as a **portfolio-grade repository landing page**: it explains the problem, the architecture, the tradeoffs, the setup, the API, the demo path, and the operational story of the project in one place.
-
-If you want to use it directly, replace your current `README.md` with this file and then overwrite the placeholder visuals in `docs/assets/` with your real screenshots and demo thumbnail.
