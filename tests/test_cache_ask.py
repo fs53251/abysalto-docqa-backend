@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-from pathlib import Path
 import uuid
 
 import numpy as np
-from fastapi.testclient import TestClient
 
 
 class FakeCache:
@@ -40,10 +38,10 @@ class DummyQA:
         return Result()
 
 
-def test_answer_cache_hit_preserves_filename(
-    client: TestClient,
+def test_answer_cache_hit_preserves_filename_and_grounded_flag(
+    client,
     services,
-    temp_data_dir: Path,
+    temp_data_dir,
     create_owned_document,
     monkeypatch,
 ):
@@ -56,7 +54,9 @@ def test_answer_cache_hit_preserves_filename(
     from app.services.retrieval.retriever import RetrievedChunk
 
     doc_id = uuid.uuid4().hex
-    create_owned_document(client, doc_id=doc_id, filename="cache-doc.pdf")
+    create_owned_document(
+        client, doc_id=doc_id, filename="cache-doc.pdf", status="indexed"
+    )
     processed = temp_data_dir / "processed" / doc_id
     processed.mkdir(parents=True, exist_ok=True)
     (processed / "faiss.index").write_bytes(b"index")
@@ -70,23 +70,24 @@ def test_answer_cache_hit_preserves_filename(
                 page=1,
                 chunk_index=0,
                 text_snippet="Some context",
+                text="Some context",
             )
         ]
 
     monkeypatch.setattr(retr_mod.RetrieverService, "search", fake_search)
 
     first = client.post(
-        "/ask",
-        json={"question": "What is it?", "scope": "all", "top_k": 1},
+        "/ask", json={"question": "What is it?", "scope": "all", "top_k": 1}
     )
     assert first.status_code == 200
     assert first.json()["answer"] == "ANSWER"
+    assert first.json()["grounded"] is True
     assert first.json()["sources"][0]["filename"] == "cache-doc.pdf"
 
     second = client.post(
-        "/ask",
-        json={"question": "What is it?", "scope": "all", "top_k": 1},
+        "/ask", json={"question": "What is it?", "scope": "all", "top_k": 1}
     )
     assert second.status_code == 200
     assert second.json()["answer"] == "ANSWER"
+    assert second.json()["grounded"] is True
     assert second.json()["sources"][0]["filename"] == "cache-doc.pdf"

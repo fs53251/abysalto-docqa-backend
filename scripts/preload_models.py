@@ -29,17 +29,6 @@ def preload_embedding_model() -> None:
     )
 
 
-def preload_qa_model() -> None:
-    from transformers import AutoModelForQuestionAnswering, AutoTokenizer
-
-    cache_dir = os.getenv("HF_HOME")
-    AutoTokenizer.from_pretrained(settings.QA_MODEL_NAME, cache_dir=cache_dir)
-    AutoModelForQuestionAnswering.from_pretrained(
-        settings.QA_MODEL_NAME,
-        cache_dir=cache_dir,
-    )
-
-
 def preload_spacy_model() -> None:
     import spacy
     from spacy.cli import download as spacy_download
@@ -60,10 +49,11 @@ def preload_easyocr_models() -> None:
 def main() -> None:
     _prepare_cache_dirs()
     preload_embedding_model()
-    preload_qa_model()
     preload_spacy_model()
     preload_easyocr_models()
-    print("Model caches are ready.")
+    print(
+        "Model caches are ready. Answer generation uses the OpenAI API at request time."
+    )
 
 
 if __name__ == "__main__":

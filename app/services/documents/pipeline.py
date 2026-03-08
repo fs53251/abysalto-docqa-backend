@@ -15,8 +15,12 @@ from app.repositories.documents import (
     mark_document_indexed,
     mark_document_processing,
 )
+from app.services.documents.metadata import (
+    build_document_artifact_state,
+    clone_processed_artifacts,
+)
 from app.services.indexing.chunking import build_chunks_for_doc, save_chunks
-from app.services.indexing.embed_cunks import embed_document_chunks
+from app.services.indexing.embed_chunks import embed_document_chunks
 from app.services.indexing.faiss_index import build_faiss_index
 from app.services.ingestion.image_text import extract_image_text, save_image_text_json
 from app.services.ingestion.pdf_text import extract_pdf_text_per_page, save_text_json
@@ -35,11 +39,11 @@ class UploadProcessingResult:
     chunk_count: int | None = None
     row_count: int | None = None
     dim: int | None = None
+    reused_from_doc_id: str | None = None
 
 
 def _extract_document(*, document: Document) -> int:
     doc_id = document_public_id(document.id)
-
     try:
         metadata = read_metadata(doc_id)
     except FileNotFoundError as exc:
@@ -86,7 +90,6 @@ def _extract_document(*, document: Document) -> int:
 
 def _chunk_document(*, document: Document) -> int:
     doc_id = document_public_id(document.id)
-
     try:
         chunks, chunk_map = build_chunks_for_doc(doc_id)
     except FileNotFoundError as exc:
@@ -106,7 +109,6 @@ def _embed_document(
     *, document: Document, emb_svc: EmbeddingServicePort
 ) -> tuple[int, int]:
     doc_id = document_public_id(document.id)
-
     try:
         result = embed_document_chunks(doc_id, emb_svc)
     except FileNotFoundError as exc:
@@ -115,31 +117,57 @@ def _embed_document(
         if str(exc) == "TOO_MANY_CHUNKS_TO_EMBED":
             raise PayloadTooLarge("Too many chunks to embed; adjust settings.") from exc
         raise InvalidInput("Embedding failed due to invalid input.") from exc
-
     return result.row_count, result.dim
 
 
 def _index_document(*, document: Document) -> tuple[int, int]:
     doc_id = document_public_id(document.id)
-
     try:
         result = build_faiss_index(doc_id)
     except FileNotFoundError as exc:
         raise InternalError("Embeddings not found after embedding.") from exc
     except ValueError as exc:
         raise InvalidInput("Failed to build FAISS index.") from exc
-
     return result.row_count, result.dim
 
 
+def try_reuse_processed_document(
+    *, db, document: Document, source_doc_id: str
+) -> UploadProcessingResult | None:
+    target_doc_id = document_public_id(document.id)
+    if source_doc_id == target_doc_id:
+        return None
+
+    source_artifacts = build_document_artifact_state(source_doc_id)
+    if not source_artifacts.ready_to_ask:
+        return None
+    if not clone_processed_artifacts(source_doc_id, target_doc_id):
+        return None
+
+    mark_document_processing(db, document=document)
+    mark_document_indexed(db, document=document)
+    logger.info(
+        "upload processing reused existing artifacts",
+        extra={
+            "event": "upload.processing.reused",
+            "doc_id": target_doc_id,
+            "reused_from_doc_id": source_doc_id,
+        },
+    )
+    return UploadProcessingResult(
+        doc_id=target_doc_id,
+        status="indexed",
+        page_count=source_artifacts.page_count,
+        chunk_count=source_artifacts.chunk_count,
+        row_count=source_artifacts.chunk_count,
+        reused_from_doc_id=source_doc_id,
+    )
+
+
 def process_uploaded_document(
-    *,
-    db,
-    document: Document,
-    emb_svc: EmbeddingServicePort,
+    *, db, document: Document, emb_svc: EmbeddingServicePort
 ) -> UploadProcessingResult:
     doc_id = document_public_id(document.id)
-
     page_count: int | None = None
     chunk_count: int | None = None
     row_count: int | None = None
@@ -173,7 +201,6 @@ def process_uploaded_document(
                 "dim": dim,
             },
         )
-
         return UploadProcessingResult(
             doc_id=doc_id,
             status="indexed",
@@ -231,13 +258,10 @@ def process_uploaded_document(
 
 
 def process_uploaded_document_task(
-    *,
-    public_doc_id: str,
-    emb_svc: EmbeddingServicePort,
+    *, public_doc_id: str, emb_svc: EmbeddingServicePort
 ) -> None:
     session_local = get_sessionmaker()
     db = session_local()
-
     try:
         parsed_doc_id = parse_document_public_id(public_doc_id)
         document = get_document(db, doc_id=parsed_doc_id)
@@ -251,11 +275,6 @@ def process_uploaded_document_task(
                 },
             )
             return
-
-        process_uploaded_document(
-            db=db,
-            document=document,
-            emb_svc=emb_svc,
-        )
+        process_uploaded_document(db=db, document=document, emb_svc=emb_svc)
     finally:
         db.close()

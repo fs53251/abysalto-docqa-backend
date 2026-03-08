@@ -39,10 +39,10 @@ class SessionIdentityMiddleware(BaseHTTPMiddleware):
             response.set_cookie(
                 key=settings.SESSION_COOKIE_NAME,
                 value=dump_session_cookie(session_id),
-                max_age=settings.SESSION_TTL_DAYS * 24 * 60 * 60,
+                max_age=settings.SESSION_COOKIE_MAX_AGE_SECONDS,
                 httponly=True,
-                samesite="lax",
-                secure=settings.APP_ENV == "prod",
+                samesite=settings.SESSION_COOKIE_SAMESITE,
+                secure=settings.SESSION_COOKIE_SECURE,
                 path="/",
             )
 

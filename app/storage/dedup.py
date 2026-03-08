@@ -1,95 +1,76 @@
+from __future__ import annotations
+
 import json
 from pathlib import Path
-from typing import Optional
 
 from app.storage.files import ensure_dir, get_upload_root
 
 
 def _index_path() -> Path:
-    """
-    Returns the path to the SHA-256 index file.
-
-    The index file stores a mapping:
-        sha256_hash -> document_id
-
-    The file is located inside the upload root directory:
-        <upload_root>/sha256_index.json
-
-    Ensures the upload root directory exists before returning the path.
-    """
     root = get_upload_root()
     ensure_dir(root)
     return root / "sha256_index.json"
 
 
-def find_existing_doc_id(sha256: str) -> Optional[str]:
-    """
-    Look up an existing document ID by its SHA-256 hash.
+def _read_index() -> dict[str, list[str]]:
+    path = _index_path()
+    if not path.exists():
+        return {}
+    raw = json.loads(path.read_text(encoding="utf-8") or "{}")
+    normalized: dict[str, list[str]] = {}
+    for sha256, value in raw.items():
+        if isinstance(value, str):
+            normalized[sha256] = [value]
+        elif isinstance(value, list):
+            normalized[sha256] = [str(item) for item in value if str(item).strip()]
+    return normalized
 
-    Parameters
-    ----------
-    sha256 : str
-        The SHA-256 hash of a file.
 
-    Returns
-    -------
-    Optional[str]
-        - The associated document ID if the hash exists.
-        - None if the hash is not found or index file does not exist.
+def _write_index(data: dict[str, list[str]]) -> None:
+    path = _index_path()
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    tmp.replace(path)
 
-    Example
-    -------
-    >>> find_existing_doc_id("abc123")
-    "doc_42"
 
-    >>> find_existing_doc_id("nonexistent")
-    None
-    """
-    p = _index_path()
-    if not p.exists():
-        return None
+def find_existing_doc_ids(sha256: str) -> list[str]:
+    return list(_read_index().get(sha256, []))
 
-    data = json.loads(p.read_text(encoding="utf-8") or "{}")
-    return data.get(sha256)
+
+def find_existing_doc_id(sha256: str) -> str | None:
+    doc_ids = find_existing_doc_ids(sha256)
+    return doc_ids[0] if doc_ids else None
+
+
+def find_reusable_doc_id(
+    sha256: str, *, exclude_doc_id: str | None = None
+) -> str | None:
+    for doc_id in find_existing_doc_ids(sha256):
+        if exclude_doc_id and doc_id == exclude_doc_id:
+            continue
+        return doc_id
+    return None
 
 
 def upsert_hash(sha256: str, doc_id: str) -> None:
-    """
-    Insert or update a SHA-256 -> document ID mapping.
+    data = _read_index()
+    current = data.get(sha256, [])
+    if doc_id not in current:
+        current.append(doc_id)
+    data[sha256] = current
+    _write_index(data)
 
-    If the hash already exists, its document ID will be overwritten.
-    If it does not exist, it will be added.
 
-    The update is written atomically:
-        - Data is first written to a temporary file (.tmp)
-        - The temporary file replaces the original index file
-
-    This prevents corruption if the process crashes during write.
-
-    Parameters
-    ----------
-    sha256 : str
-        The SHA-256 hash of the file.
-    doc_id : str
-        The internal document ID associated with the file.
-
-    Example
-    -------
-    >>> upsert_hash("abc123", "doc_42")
-
-    The JSON file may then look like:
-    {
-        "abc123": "doc_42"
-    }
-    """
-    p = _index_path()
-    data = {}
-
-    if p.exists():
-        data = json.loads(p.read_text(encoding="utf-8") or "{}")
-
-    data[sha256] = doc_id
-
-    tmp = p.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
-    tmp.replace(p)
+def remove_doc_id(doc_id: str, sha256: str | None = None) -> None:
+    data = _read_index()
+    keys = [sha256] if sha256 else list(data.keys())
+    changed = False
+    for key in keys:
+        doc_ids = [item for item in data.get(key, []) if item != doc_id]
+        if doc_ids:
+            data[key] = doc_ids
+        elif key in data:
+            del data[key]
+        changed = True
+    if changed:
+        _write_index(data)

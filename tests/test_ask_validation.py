@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import uuid
-from pathlib import Path
 
 import numpy as np
 from fastapi.testclient import TestClient
@@ -20,20 +19,17 @@ class DummyQAService:
         return Result()
 
 
-def _touch_index(temp_data_dir: Path, doc_id: str) -> None:
+def _touch_index(temp_data_dir, doc_id: str) -> None:
     processed = temp_data_dir / "processed" / doc_id
     processed.mkdir(parents=True, exist_ok=True)
     (processed / "faiss.index").write_bytes(b"index")
 
 
 def _create_foreign_session_document(
-    *,
-    temp_data_dir: Path,
-    filename: str = "foreign-session.pdf",
+    *, temp_data_dir, filename: str = "foreign-session.pdf"
 ) -> str:
     document_uuid = generate_document_id()
     public_doc_id = document_public_id(document_uuid)
-
     stored_path = temp_data_dir / "uploads" / public_doc_id / "original" / filename
     stored_path.parent.mkdir(parents=True, exist_ok=True)
     stored_path.touch(exist_ok=True)
@@ -52,24 +48,17 @@ def _create_foreign_session_document(
         )
     finally:
         db.close()
-
     return public_doc_id
 
 
 def test_ask_rejects_invalid_top_k(client: TestClient) -> None:
-    response = client.post(
-        "/ask",
-        json={"question": "hello", "top_k": 999},
-    )
+    response = client.post("/ask", json={"question": "hello", "top_k": 999})
     assert response.status_code == 400, response.text
     assert response.json()["error_code"] == "invalid_input"
 
 
 def test_ask_rejects_question_too_long(client: TestClient) -> None:
-    response = client.post(
-        "/ask",
-        json={"question": "x" * 2001, "top_k": 1},
-    )
+    response = client.post("/ask", json={"question": "x" * 2001, "top_k": 1})
     assert response.status_code == 400, response.text
     assert response.json()["error_code"] == "invalid_input"
 
@@ -91,7 +80,7 @@ def test_ask_rejects_invalid_doc_id(client: TestClient) -> None:
 def test_anon_session_ask_uses_only_session_documents(
     client: TestClient,
     services,
-    temp_data_dir: Path,
+    temp_data_dir,
     create_owned_document,
     monkeypatch,
 ) -> None:
@@ -106,15 +95,11 @@ def test_anon_session_ask_uses_only_session_documents(
     from app.services.retrieval.retriever import RetrievedChunk
 
     owned = create_owned_document(
-        client,
-        filename="owned-session.pdf",
-        status="indexed",
+        client, filename="owned-session.pdf", status="indexed"
     )
     foreign_doc_id = _create_foreign_session_document(
-        temp_data_dir=temp_data_dir,
-        filename="foreign-session.pdf",
+        temp_data_dir=temp_data_dir, filename="foreign-session.pdf"
     )
-
     _touch_index(temp_data_dir, owned.doc_id)
     _touch_index(temp_data_dir, foreign_doc_id)
 
@@ -130,14 +115,14 @@ def test_anon_session_ask_uses_only_session_documents(
                 page=1,
                 chunk_index=0,
                 text_snippet="Owned session snippet",
+                text="Owned session snippet",
             )
         ]
 
     monkeypatch.setattr(retr_mod.RetrieverService, "search", fake_search)
 
     response = client.post(
-        "/ask",
-        json={"question": "Which docs are visible?", "top_k": 1},
+        "/ask", json={"question": "Which docs are visible?", "top_k": 1}
     )
     assert response.status_code == 200, response.text
     payload = response.json()
@@ -150,7 +135,7 @@ def test_anon_session_ask_uses_only_session_documents(
 def test_auth_user_ask_uses_only_user_documents(
     client: TestClient,
     services,
-    temp_data_dir: Path,
+    temp_data_dir,
     register_and_login,
     create_user_owned_document,
     monkeypatch,
@@ -169,16 +154,11 @@ def test_auth_user_ask_uses_only_user_documents(
     other = register_and_login(email="scope-other@example.com")
 
     owned = create_user_owned_document(
-        user_id=owner.user_id,
-        filename="owned-user.pdf",
-        status="indexed",
+        user_id=owner.user_id, filename="owned-user.pdf", status="indexed"
     )
     foreign = create_user_owned_document(
-        user_id=other.user_id,
-        filename="foreign-user.pdf",
-        status="indexed",
+        user_id=other.user_id, filename="foreign-user.pdf", status="indexed"
     )
-
     _touch_index(temp_data_dir, owned.doc_id)
     _touch_index(temp_data_dir, foreign.doc_id)
 
@@ -194,6 +174,7 @@ def test_auth_user_ask_uses_only_user_documents(
                 page=1,
                 chunk_index=0,
                 text_snippet="Owned user snippet",
+                text="Owned user snippet",
             )
         ]
 

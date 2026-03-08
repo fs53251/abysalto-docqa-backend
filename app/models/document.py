@@ -21,10 +21,14 @@ class DocumentListItem(BaseModel):
     content_type: str | None = None
     size_bytes: int | None = None
     status: str
+    status_detail: str | None = None
+    ready_to_ask: bool = False
     created_at: datetime
     indexed_at: datetime | None = None
     pages: int | None = None
     chunks: int | None = None
+    owner_type: Literal["user", "session"]
+    owner_id: str | None = None
 
 
 class DocumentListResponse(BaseModel):
@@ -38,9 +42,12 @@ class DocumentDetailResponse(BaseModel):
     content_type: str | None = None
     size_bytes: int | None = None
     status: str
+    status_detail: str | None = None
+    ready_to_ask: bool = False
     created_at: datetime
     indexed_at: datetime | None = None
     owner_type: Literal["user", "session"]
+    owner_id: str | None = None
     page_count: int | None = None
     chunk_count: int | None = None
     artifacts: DocumentArtifacts

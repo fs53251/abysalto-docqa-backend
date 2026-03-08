@@ -8,7 +8,7 @@ from app.api.deps import EmbeddingSvc, OwnedDocument
 from app.core.errors import InvalidInput, NotFound, PayloadTooLarge
 from app.core.identifiers import document_public_id
 from app.models.embeddings import EmbedBuildResponse
-from app.services.indexing.embed_cunks import embed_document_chunks
+from app.services.indexing.embed_chunks import embed_document_chunks
 from app.storage.embeddings import (
     get_embeddings_info_path,
     get_embeddings_meta_jsonl_path,
@@ -20,9 +20,7 @@ router = APIRouter(tags=["indexing"])
 
 @router.post("/documents/{doc_id}/embed", response_model=EmbedBuildResponse)
 def embed_document(
-    document: OwnedDocument,
-    emb_svc: EmbeddingSvc,
-    force: bool = Query(False),
+    document: OwnedDocument, emb_svc: EmbeddingSvc, force: bool = Query(False)
 ) -> EmbedBuildResponse:
     doc_id = document_public_id(document.id)
     npy_path = get_embeddings_npy_path(doc_id)

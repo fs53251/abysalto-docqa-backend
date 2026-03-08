@@ -20,7 +20,9 @@ from app.repositories.documents import (
 from app.services.documents.metadata import (
     build_document_artifact_state,
     delete_document_storage,
+    document_status_detail,
 )
+from app.storage.dedup import remove_doc_id
 
 router = APIRouter(tags=["documents"])
 logger = logging.getLogger(__name__)
@@ -30,32 +32,36 @@ def _owner_type(document) -> str:
     return "user" if document.owner_user_id is not None else "session"
 
 
+def _owner_id(document) -> str | None:
+    if document.owner_user_id is not None:
+        return str(document.owner_user_id)
+    return document.owner_session_id
+
+
 @router.get("/documents", response_model=DocumentListResponse)
-def list_documents(
-    db: DbSession,
-    identity: CurrentIdentity,
-) -> DocumentListResponse:
+def list_documents(db: DbSession, identity: CurrentIdentity) -> DocumentListResponse:
     docs = list_documents_for_identity(db, identity=identity)
     items: list[DocumentListItem] = []
-
-    for doc in docs:
-        public_doc_id = document_public_id(doc.id)
+    for document in docs:
+        public_doc_id = document_public_id(document.id)
         artifacts = build_document_artifact_state(public_doc_id)
-
         items.append(
             DocumentListItem(
                 doc_id=public_doc_id,
-                filename=doc.filename,
-                content_type=doc.content_type,
-                size_bytes=doc.size_bytes,
-                status=doc.status,
-                created_at=doc.created_at,
-                indexed_at=doc.indexed_at,
+                filename=document.filename,
+                content_type=document.content_type,
+                size_bytes=document.size_bytes,
+                status=document.status,
+                status_detail=document_status_detail(document.status, artifacts),
+                ready_to_ask=artifacts.ready_to_ask and document.status == "indexed",
+                created_at=document.created_at,
+                indexed_at=document.indexed_at,
                 pages=artifacts.page_count,
                 chunks=artifacts.chunk_count,
+                owner_type=_owner_type(document),
+                owner_id=_owner_id(document),
             )
         )
-
     return DocumentListResponse(documents=items, count=len(items))
 
 
@@ -63,16 +69,18 @@ def list_documents(
 def get_document_detail(document: OwnedDocument) -> DocumentDetailResponse:
     public_doc_id = document_public_id(document.id)
     artifacts = build_document_artifact_state(public_doc_id)
-
     return DocumentDetailResponse(
         doc_id=public_doc_id,
         filename=document.filename,
         content_type=document.content_type,
         size_bytes=document.size_bytes,
         status=document.status,
+        status_detail=document_status_detail(document.status, artifacts),
+        ready_to_ask=artifacts.ready_to_ask and document.status == "indexed",
         created_at=document.created_at,
         indexed_at=document.indexed_at,
         owner_type=_owner_type(document),
+        owner_id=_owner_id(document),
         page_count=artifacts.page_count,
         chunk_count=artifacts.chunk_count,
         artifacts=DocumentArtifacts(
@@ -87,14 +95,13 @@ def get_document_detail(document: OwnedDocument) -> DocumentDetailResponse:
 
 
 @router.delete("/documents/{doc_id}", response_model=DocumentDeleteResponse)
-def delete_document(
-    document: OwnedDocument,
-    db: DbSession,
-) -> DocumentDeleteResponse:
+def delete_document(document: OwnedDocument, db: DbSession) -> DocumentDeleteResponse:
     public_doc_id = document_public_id(document.id)
     owner_type = _owner_type(document)
 
     delete_document_storage(public_doc_id)
+    if document.sha256:
+        remove_doc_id(public_doc_id, sha256=document.sha256)
     delete_document_record(db, document=document)
 
     logger.info(
@@ -105,5 +112,4 @@ def delete_document(
             "owner_type": owner_type,
         },
     )
-
     return DocumentDeleteResponse(doc_id=public_doc_id)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any
 
 from fastapi import FastAPI
@@ -15,8 +16,8 @@ from app.services.redis_client import create_redis_client
 logger = logging.getLogger(__name__)
 
 
-def _disabled_in_test(name: str) -> bool:
-    return settings.APP_ENV == "test"
+def _should_skip_service_init() -> bool:
+    return settings.APP_ENV == "test" or "PYTEST_CURRENT_TEST" in os.environ
 
 
 def _set_service_status(
@@ -37,15 +38,17 @@ def _set_service_status(
 
 
 def init_embedding_service(app: FastAPI) -> None:
-    if _disabled_in_test("embedding"):
+    if _should_skip_service_init():
         app.state.embedding_service = None
         _set_service_status(
             app,
             "embedding",
             ready=False,
-            detail="skipped in test env",
+            detail="skipped in test runtime",
         )
-        logger.info("Embedding service skipped in test env (use dependency overrides).")
+        logger.info(
+            "Embedding service skipped in test runtime (use dependency overrides)."
+        )
         return
 
     try:
@@ -73,15 +76,15 @@ def init_embedding_service(app: FastAPI) -> None:
 
 
 def init_qa_service(app: FastAPI) -> None:
-    if _disabled_in_test("qa"):
+    if _should_skip_service_init():
         app.state.qa_service = None
         _set_service_status(
             app,
             "qa",
             ready=False,
-            detail="skipped in test env",
+            detail="skipped in test runtime",
         )
-        logger.info("QA service skipped in test env (use dependency overrides).")
+        logger.info("QA service skipped in test runtime (use dependency overrides).")
         return
 
     try:
@@ -92,10 +95,17 @@ def init_qa_service(app: FastAPI) -> None:
             app,
             "qa",
             ready=True,
-            detail="initialized",
-            extra={"model": qa.model_name},
+            detail=getattr(qa, "status_detail", "initialized"),
+            extra={
+                "model": qa.model_name,
+                "backend": getattr(qa, "backend", "unknown"),
+            },
         )
-        logger.info("QA service ready: %s", qa.model_name)
+        logger.info(
+            "QA service ready: %s (%s)",
+            qa.model_name,
+            getattr(qa, "backend", "unknown"),
+        )
     except Exception as e:
         app.state.qa_service = None
         _set_service_status(
@@ -109,15 +119,15 @@ def init_qa_service(app: FastAPI) -> None:
 
 
 def init_ner_service(app: FastAPI) -> None:
-    if _disabled_in_test("ner"):
+    if _should_skip_service_init():
         app.state.ner_service = None
         _set_service_status(
             app,
             "ner",
             ready=False,
-            detail="skipped in test env",
+            detail="skipped in test runtime",
         )
-        logger.info("NER service skipped in test env (use dependency overrides).")
+        logger.info("NER service skipped in test runtime (use dependency overrides).")
         return
 
     try:
@@ -145,15 +155,15 @@ def init_ner_service(app: FastAPI) -> None:
 
 
 def init_redis_client(app: FastAPI) -> None:
-    if settings.APP_ENV == "test":
+    if _should_skip_service_init():
         app.state.redis_client = None
         _set_service_status(
             app,
             "redis",
             ready=False,
-            detail="skipped in test env",
+            detail="skipped in test runtime",
         )
-        logger.info("Redis client skipped in test env (use dependency overrides).")
+        logger.info("Redis client skipped in test runtime (use dependency overrides).")
         return
 
     redis_needed = bool(settings.REDIS_URL) and (
@@ -196,15 +206,15 @@ def init_redis_client(app: FastAPI) -> None:
 
 
 def init_cache(app: FastAPI) -> None:
-    if settings.APP_ENV == "test":
+    if _should_skip_service_init():
         app.state.cache = None
         _set_service_status(
             app,
             "cache",
             ready=False,
-            detail="skipped in test env",
+            detail="skipped in test runtime",
         )
-        logger.info("Cache skipped in test env (use dependency overrides).")
+        logger.info("Cache skipped in test runtime (use dependency overrides).")
         return
 
     if not settings.ENABLE_CACHE:

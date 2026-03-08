@@ -10,18 +10,10 @@ from app.models.ner import Entity
 
 
 class AskRequest(BaseModel):
-    question: str = Field(
-        ...,
-        min_length=1,
-        max_length=settings.MAX_QUESTION_CHARS,
-    )
+    question: str = Field(..., min_length=1, max_length=settings.MAX_QUESTION_CHARS)
     doc_ids: list[str] | None = None
     scope: Literal["all", "docs"] = "all"
-    top_k: int = Field(
-        default=settings.DEFAULT_TOP_K,
-        ge=1,
-        le=settings.MAX_TOP_K,
-    )
+    top_k: int = Field(default=settings.DEFAULT_TOP_K, ge=1, le=settings.MAX_TOP_K)
 
     @field_validator("question", mode="before")
     @classmethod
@@ -48,14 +40,19 @@ class AskRequest(BaseModel):
 class AskSource(BaseModel):
     doc_id: str
     filename: str | None = None
-    page: int | None
+    page: int | None = None
     chunk_id: str
     score: float
+    semantic_score: float | None = None
+    lexical_score: float | None = None
     text_excerpt: str
 
 
 class AskResponse(BaseModel):
     answer: str
-    confidence: float | None
+    grounded: bool = True
+    confidence: float | None = None
+    confidence_label: Literal["low", "medium", "high"] | None = None
+    message: str | None = None
     sources: list[AskSource]
     entities: list[Entity]

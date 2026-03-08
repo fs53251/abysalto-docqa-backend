@@ -17,11 +17,6 @@ class _RawEnt:
 
 
 class NerService:
-    """
-    Singleton spaCy pipeline.
-    Fail-soft: if model isn't available, keep service disabled (None in app.state)
-    """
-
     def __init__(self, model_name: str):
         self.model_name = model_name
         self._nlp = None
@@ -30,66 +25,51 @@ class NerService:
         if self._nlp is None:
             try:
                 import spacy
-            except ModuleNotFoundError as e:  # pragma: no cover
-                raise ExternalDependencyMissing("spacy") from e
-
+            except ModuleNotFoundError as exc:  # pragma: no cover
+                raise ExternalDependencyMissing("spacy") from exc
             self._nlp = spacy.load(self.model_name)
 
     def _extract_from_text(self, text: str) -> list[_RawEnt]:
         if self._nlp is None:
             raise RuntimeError("NER model not loaded. Call load() first.")
-
         doc = self._nlp(text)
-        out: list[_RawEnt] = []
-
-        for ent in doc.ents:
-            out.append(
-                _RawEnt(
-                    text=ent.text,
-                    label=ent.label_,
-                    start=int(ent.start_char),
-                    end=int(ent.end_char),
-                )
+        return [
+            _RawEnt(
+                text=ent.text,
+                label=ent.label_,
+                start=int(ent.start_char),
+                end=int(ent.end_char),
             )
-
-        return out
+            for ent in doc.ents
+        ]
 
     @staticmethod
     def _dedupe_and_cap(entities: list[Entity]) -> list[Entity]:
-        """
-        dedupe: remove if there are duplicates in the same chunk
-        cap: top limit of enitities
-        """
         seen: set[tuple[str, str, str, str | None]] = set()
         out: list[Entity] = []
-
-        for e in entities:
-            key = (e.text.strip().lower(), e.label, e.source, e.chunk_id)
+        for entity in entities:
+            key = (
+                entity.text.strip().lower(),
+                entity.label,
+                entity.source,
+                entity.chunk_id,
+            )
             if key in seen:
                 continue
-
             seen.add(key)
-            out.append(e)
-
+            out.append(entity)
             if len(out) >= settings.MAX_ENTITIES:
                 break
-
         return out
 
     def extract_entities(
         self, answer: str, sources: list[RetrievedChunk]
     ) -> list[Entity]:
-        """
-        Extract entities from:
-            - final answer (source="answer")
-            - each retrieved chunk snippet (source="chunk", includes doc_id/page/chunk_id)
-        """
         all_entities: list[Entity] = []
 
-        # answer entities
-        ans_text = (answer or "").strip()
-        if ans_text:
-            for ent in self._extract_from_text(ans_text):
+        answer_text = (answer or "").strip()
+        if answer_text:
+            for ent in self._extract_from_text(answer_text):
                 all_entities.append(
                     Entity(
                         text=ent.text,
@@ -103,12 +83,10 @@ class NerService:
                     )
                 )
 
-        # chunk entities
-        for ch in sources:
-            chunk_text = (ch.text_snippet or "").strip()
+        for source in sources:
+            chunk_text = (source.text or source.text_snippet or "").strip()
             if not chunk_text:
                 continue
-
             for ent in self._extract_from_text(chunk_text):
                 all_entities.append(
                     Entity(
@@ -117,9 +95,9 @@ class NerService:
                         start=ent.start,
                         end=ent.end,
                         source="chunk",
-                        doc_id=ch.doc_id,
-                        page=ch.page,
-                        chunk_id=ch.chunk_id,
+                        doc_id=source.doc_id,
+                        page=source.page,
+                        chunk_id=source.chunk_id,
                     )
                 )
 

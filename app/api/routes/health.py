@@ -97,6 +97,8 @@ def health_ready(request: Request):
     }
 
     return JSONResponse(
-        status_code=status.HTTP_200_OK if ready else status.HTTP_503_SERVICE_UNAVAILABLE,
+        status_code=(
+            status.HTTP_200_OK if ready else status.HTTP_503_SERVICE_UNAVAILABLE
+        ),
         content=payload,
     )
