@@ -90,7 +90,11 @@ def test_ask_returns_answer_sources_filename_and_grounding(
     assert data["answer"] == "MOCK ANSWER"
     assert data["grounded"] is True
     assert data["confidence"] == 0.9
-    assert data["message"] is None
+    assert data["confidence_label"] == "high"
+    assert (
+        data["message"]
+        == "Structured answer generated from retrieved document evidence."
+    )
     assert len(data["sources"]) == 1
     assert data["sources"][0]["doc_id"] == doc_id
     assert data["sources"][0]["filename"] == "unit-doc.pdf"

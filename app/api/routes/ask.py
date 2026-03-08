@@ -305,6 +305,7 @@ def ask(
         answer=result.answer,
         grounded=result.grounded,
         confidence=result.confidence,
+        confidence_label=result.confidence_label,
         message=result.message,
         sources=[
             AskSource(

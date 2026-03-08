@@ -246,7 +246,10 @@ def sync_identity_state() -> None:
             st.session_state.auth_token = ""
             st.session_state.current_user = None
             st.session_state.current_identity = None
-            flash("warning", "Your sign-in session expired. You are continuing as a guest.")
+            flash(
+                "warning",
+                "Your sign-in session expired. You are continuing as a guest.",
+            )
     else:
         st.session_state.current_user = None
 
@@ -283,7 +286,9 @@ def refresh_documents(*, clear_detail_cache: bool = True) -> None:
         st.session_state.active_doc_id = next(iter(allowed_ids), None)
 
 
-def refresh_document_detail(doc_id: str, *, force: bool = False) -> dict[str, Any] | None:
+def refresh_document_detail(
+    doc_id: str, *, force: bool = False
+) -> dict[str, Any] | None:
     if not doc_id:
         return None
     if not force and doc_id in st.session_state.document_detail_cache:
@@ -337,6 +342,24 @@ def format_size(num_bytes: int | None) -> str:
     return f"{value:.1f} {unit}" if unit != "B" else f"{int(value)} {unit}"
 
 
+def format_confidence_label(response: dict[str, Any]) -> str:
+    label = response.get("confidence_label")
+    if isinstance(label, str) and label.strip():
+        return label.strip().replace("_", " ").title()
+
+    confidence = response.get("confidence")
+    try:
+        numeric = float(confidence)
+    except (TypeError, ValueError):
+        return "—"
+
+    if numeric >= 0.75:
+        return "High"
+    if numeric >= 0.45:
+        return "Medium"
+    return "Low"
+
+
 def documents() -> list[dict[str, Any]]:
     return st.session_state.documents_cache
 
@@ -365,7 +388,9 @@ def document_lookup() -> dict[str, dict[str, Any]]:
 
 def ready_document_options() -> dict[str, str]:
     return {
-        doc["doc_id"]: f"{doc.get('filename') or doc['doc_id']} · {status_label(doc.get('status'))}"
+        doc[
+            "doc_id"
+        ]: f"{doc.get('filename') or doc['doc_id']} · {status_label(doc.get('status'))}"
         for doc in ready_documents()
         if doc.get("doc_id")
     }
@@ -458,14 +483,19 @@ def render_auth_panel() -> None:
                     login_result = api_request(
                         "POST",
                         "/auth/login",
-                        json_body={"email": register_email, "password": register_password},
+                        json_body={
+                            "email": register_email,
+                            "password": register_password,
+                        },
                         include_auth=False,
                     )
                     if login_result.ok and isinstance(login_result.data, dict):
                         st.session_state.auth_token = login_result.data.get(
                             "access_token", ""
                         )
-                        clear_document_state(clear_upload_result=True, clear_history=True)
+                        clear_document_state(
+                            clear_upload_result=True, clear_history=True
+                        )
                         queue_refresh(hard=True)
                         flash(
                             "success",
@@ -518,7 +548,9 @@ def render_summary_bar() -> None:
     ready = ready_documents()
     selected = selected_ready_doc_ids()
     metrics = st.columns(4)
-    metrics[0].metric("Identity", "User" if st.session_state.current_user else "Session")
+    metrics[0].metric(
+        "Identity", "User" if st.session_state.current_user else "Session"
+    )
     metrics[1].metric("Documents", len(docs))
     metrics[2].metric("Ready for questions", len(ready))
     metrics[3].metric("Selected in scope", len(selected))
@@ -553,7 +585,14 @@ def render_upload_panel() -> None:
             st.rerun()
 
         files_payload = [
-            ("files", (upload.name, upload.getvalue(), upload.type or "application/octet-stream"))
+            (
+                "files",
+                (
+                    upload.name,
+                    upload.getvalue(),
+                    upload.type or "application/octet-stream",
+                ),
+            )
             for upload in uploads or []
         ]
         with st.status("Uploading and processing documents…", expanded=True) as status:
@@ -571,7 +610,9 @@ def render_upload_panel() -> None:
                     dict.fromkeys(selected_ready_doc_ids() + ready_ids_from_upload)
                 )
                 ready_count = sum(
-                    1 for item in result.data.get("documents", []) if item.get("ready_to_ask")
+                    1
+                    for item in result.data.get("documents", [])
+                    if item.get("ready_to_ask")
                 )
                 status.update(label="Upload completed", state="complete")
                 flash(
@@ -591,7 +632,9 @@ def render_upload_panel() -> None:
 
     items = upload_response.get("documents", [])
     ready_count = sum(1 for item in items if item.get("ready_to_ask"))
-    st.caption(f"Latest upload: {ready_count}/{len(items)} documents ready for questions.")
+    st.caption(
+        f"Latest upload: {ready_count}/{len(items)} documents ready for questions."
+    )
     for item in items:
         detail = item.get("status_detail") or item.get("error_detail") or ""
         st.markdown(
@@ -606,7 +649,9 @@ def render_scope_panel() -> None:
     st.subheader("Question scope")
     ready = ready_documents()
     if not ready:
-        st.info("There are no indexed documents yet. Upload and process a document first.")
+        st.info(
+            "There are no indexed documents yet. Upload and process a document first."
+        )
         return
 
     options = ready_document_options()
@@ -683,10 +728,8 @@ def render_chat_history() -> None:
                 meta_cols = st.columns(2)
                 meta_cols[0].metric("Grounded", "yes" if grounded else "partial / weak")
                 meta_cols[1].metric(
-                    "Confidence",
-                    response.get("confidence")
-                    if response.get("confidence") is not None
-                    else "—",
+                    "Support",
+                    format_confidence_label(response),
                 )
 
                 sources = response.get("sources") or []
@@ -705,7 +748,9 @@ def render_chat_history() -> None:
                 entities = response.get("entities") or []
                 if entities:
                     with st.expander("Named entities", expanded=False):
-                        st.dataframe(entities, use_container_width=True, hide_index=True)
+                        st.dataframe(
+                            entities, use_container_width=True, hide_index=True
+                        )
             else:
                 st.error(turn.get("error_message") or "The question failed.")
 
@@ -725,10 +770,13 @@ def ask_scope_payload() -> tuple[dict[str, Any] | None, str | None]:
         payload["scope"] = "docs"
         payload["doc_ids"] = selected
         names = [
-            doc.get("filename") or doc.get("doc_id") for doc in selected_ready_documents()
+            doc.get("filename") or doc.get("doc_id")
+            for doc in selected_ready_documents()
         ]
-        label = "Scope: " + ", ".join(names[:5]) + (
-            f" and {len(names) - 5} more" if len(names) > 5 else ""
+        label = (
+            "Scope: "
+            + ", ".join(names[:5])
+            + (f" and {len(names) - 5} more" if len(names) > 5 else "")
         )
         return payload, label
 
@@ -743,7 +791,9 @@ def submit_question(question: str) -> None:
         st.rerun()
 
     payload = {**base_payload, "question": question.strip()}
-    with st.status("Searching documents and composing an answer…", expanded=True) as status:
+    with st.status(
+        "Searching documents and composing an answer…", expanded=True
+    ) as status:
         st.write(scope_label)
         result = api_request("POST", "/ask", json_body=payload)
         if result.ok and isinstance(result.data, dict):
@@ -795,7 +845,9 @@ with workspace_tab:
         render_chat_history()
 
         question_help = ask_scope_payload()[1] or ""
-        with st.form(f"ask_form_{st.session_state.ask_form_seed}", clear_on_submit=True):
+        with st.form(
+            f"ask_form_{st.session_state.ask_form_seed}", clear_on_submit=True
+        ):
             question = st.text_area(
                 "New question",
                 height=110,

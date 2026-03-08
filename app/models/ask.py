@@ -52,6 +52,7 @@ class AskResponse(BaseModel):
     answer: str
     grounded: bool = True
     confidence: float | None = None
+    confidence_label: Literal["low", "medium", "high"] | None = None
     message: str | None = None
     sources: list[AskSource]
     entities: list[Entity]
