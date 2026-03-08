@@ -38,16 +38,16 @@ redis-stop:
 	@redis-cli shutdown || true
 
 docker-up:
-	docker compose up -d
+	docker compose --env-file .env.docker up -d
 
 docker-up-build:
-	docker compose up --build -d
+	docker compose --env-file .env.docker up --build -d
 
 docker-down:
-	docker compose down
+	docker compose --env-file .env.docker down
 
 docker-logs:
-	docker compose logs -f api ui db redis
+	docker compose --env-file .env.docker logs -f api ui db redis
 
 docker-ps:
-	docker compose ps
+	docker compose --env-file .env.docker ps
