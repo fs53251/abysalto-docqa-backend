@@ -2,6 +2,12 @@ from __future__ import annotations
 
 import contextvars
 
+# Request-scoped context
+# 'global' variables for each request
+# Each HTTP Request sets contexvars:
+#   1) request_id = ...
+#   2) identity = "user:..."/"sess:..."
+
 _request_id_var: contextvars.ContextVar[str] = contextvars.ContextVar(
     "request_id",
     default="-",

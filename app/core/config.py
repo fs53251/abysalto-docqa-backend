@@ -6,6 +6,8 @@ from typing import Literal
 from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+
+# Security default values.
 _DEFAULT_SECRET_VALUES = {
     "CHANGE_ME",
     "CHANGE_ME_TOO",
@@ -15,6 +17,10 @@ _DEFAULT_SECRET_VALUES = {
 
 
 class Settings(BaseSettings):
+    """
+    Project central config.
+    Each variable can be overriden by '.env' file
+    """
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -22,29 +28,35 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    # App
     APP_NAME: str = "DocQA API"
     APP_ENV: Literal["dev", "test", "prod"] = Field(
         default="dev",
         validation_alias=AliasChoices("APP_ENV", "ENV"),
     )
 
+    # Logging settings
     LOG_LEVEL: str = "INFO"
     LOG_FORMAT: Literal["text", "json"] = "text"
     LOG_JSON_INCLUDE_EXC_INFO: bool = False
 
+    # Central dir for storing data
     DATA_DIR: str = "./data"
     UPLOAD_ROOT: str | None = None
     CACHE_ROOT: str | None = None
 
+    # DB connection string, SQLite
     DATABASE_URL: str = "sqlite:///./data/app.db"
 
+    # Session settings
     SESSION_COOKIE_NAME: str = "docqa_session"
     SESSION_COOKIE_SECRET: str = "CHANGE_ME_TOO"
     SESSION_COOKIE_SECURE: bool = False
     SESSION_COOKIE_SAMESITE: Literal["lax", "strict", "none"] = "lax"
-    SESSION_COOKIE_MAX_AGE_SECONDS: int = 7 * 24 * 60 * 60
-    SESSION_TTL_DAYS: int | None = None
+    SESSION_COOKIE_MAX_AGE_SECONDS: int = 7 * 24 * 60 * 60 # Using seconds
+    SESSION_TTL_DAYS: int | None = None # Using days
 
+    # JWT auth settings
     JWT_SECRET: str = "CHANGE_ME"
     JWT_ALGORITHM: str = "HS256"
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(
@@ -58,14 +70,20 @@ class Settings(BaseSettings):
 
     PASSWORD_MIN_LENGTH: int = 8
 
+    # These frontend addresses are allowed
+    # to call to call my API from a browser
+    # Cross-origin resource sharing
     CORS_ALLOW_ORIGINS: tuple[str, ...] = (
-        "http://localhost:3000",
+        "http://localhost:3000", # frontend
         "http://127.0.0.1:3000",
-        "http://localhost:8501",
+        "http://localhost:8501", # Streamlit
         "http://127.0.0.1:8501",
     )
+
+    # IPv4 & IPv6 localhosts
     TRUSTED_PROXIES: tuple[str, ...] = ("127.0.0.1", "::1")
 
+    # Uploaded documents
     MAX_UPLOAD_MB: int = 25
     MAX_FILES_PER_REQUEST: int = 10
     ALLOWED_EXTENSIONS: tuple[str, ...] = (
@@ -89,6 +107,7 @@ class Settings(BaseSettings):
     MAX_PDF_PAGES: int = 250
     TEXT_EMPTY_MIN_CHARS: int = 20
 
+    # OCR settings
     EASYOCR_LANGS: tuple[str, ...] = ("en",)
     EASYOCR_GPU: bool = False
     OCR_FALLBACK_ENABLED: bool = True
@@ -96,17 +115,20 @@ class Settings(BaseSettings):
     MAX_OCR_PAGES: int = 250
     MAX_IMAGE_PIXELS: int = 20_000_000
 
+    # Chunking settings
     CHUNK_SIZE_CHARS: int = 1100
     CHUNK_OVERLAP_CHARS: int = 180
     MAX_CHUNKS_PER_DOC: int = 5000
     CHUNK_SEPARATORS: tuple[str, ...] = ("\n\n", "\n", ". ", " ", "")
     CHUNK_MIN_CHARS: int = 180
 
+    # Embedding settings
     EMBEDDING_MODEL_NAME: str = "sentence-transformers/all-MiniLM-L6-v2"
     EMBEDDING_BATCH_SIZE: int = 64
     EMBEDDING_NORMALIZE: bool = True
     MAX_CHUNKS_TO_EMBED: int = 5000
 
+    # Retrieval settings
     DEFAULT_TOP_K: int = 5
     MAX_TOP_K: int = 20
     RETRIEVAL_CANDIDATE_MULTIPLIER: int = 4
@@ -142,11 +164,14 @@ class Settings(BaseSettings):
     OPENAI_TIMEOUT_SECONDS: int = 60
     OPENAI_MAX_OUTPUT_TOKENS: int = 350
 
+    # Huggingface token
     HF_TOKEN: str | None = None
 
+    # NER settings
     NER_MODEL_NAME: str = "en_core_web_sm"
     MAX_ENTITIES: int = 50
 
+    # Redis settings
     REDIS_URL: str = "redis://localhost:6379/0"
     ENABLE_CACHE: bool = True
     CACHE_TTL_SECONDS: int = 3600
@@ -166,6 +191,11 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _sync_legacy_compat_fields(self) -> Settings:
+        """
+        After all fields are loaded and validated,
+        run this function on the whole model.
+        Compatibility with legacy variables.
+        """
         if self.JWT_EXP_MIN is None:
             self.JWT_EXP_MIN = self.JWT_ACCESS_TOKEN_EXPIRE_MINUTES
         else:

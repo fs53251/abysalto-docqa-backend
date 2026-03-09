@@ -5,18 +5,20 @@ from typing import Any
 
 from fastapi import HTTPException
 
-
-@dataclass(frozen=True)
-class ErrorPayload:
-    """Standard error payload returned by the API."""
-
-    error_code: str
-    message: str
-    details: Any | None = None
+# This file creates a clean bridge between
+# internal business errors and 
+# HTTP responses in a FastAPI application.
 
 
+#########################################
+##      DOMAIN ERROR HANDLING          ##
+#########################################
 class DomainError(Exception):
-    """Base class for non-HTTP, business/domain level errors."""
+    """
+    Base class for non-HTTP,
+    business/domain level errors.
+    For internal error handling.
+    """
 
     error_code: str = "domain_error"
     status_code: int = 400
@@ -63,7 +65,9 @@ class InternalError(DomainError):
 
 
 class ExternalDependencyMissing(ServiceUnavailable):
-    """Raised when an optional dependency is not installed."""
+    """
+    Raised when an optional dependency is not installed.
+    """
 
     error_code = "dependency_missing"
 
@@ -74,8 +78,24 @@ class ExternalDependencyMissing(ServiceUnavailable):
         self.dependency = dependency
 
 
+#########################################
+##         API ERROR HANDLING          ##
+#########################################
+@dataclass(frozen=True)
+class ErrorPayload:
+    """
+    Standard error payload returned by the API.
+    """
+
+    error_code: str
+    message: str
+    details: Any | None = None
+
 class ApiError(HTTPException):
-    """HTTPException enriched with a stable error_code and optional details."""
+    """
+    HTTPException enriched with a stable error_code
+      and optional details.
+    """
 
     def __init__(
         self,

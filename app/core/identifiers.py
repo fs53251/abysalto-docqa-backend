@@ -4,18 +4,25 @@ import uuid
 
 PUBLIC_DOCUMENT_ID_LENGTH = 32
 
+# UUIDv4 identifier is a randomly generated unique ID.
+# hexadecimal chars (0-9, a-f)
 
 def generate_document_id() -> uuid.UUID:
-    """Generate a UUIDv4 document identifier stored in the database."""
+    """
+    Generate a UUIDv4 document identifier stored in the database.
+    """
     return uuid.uuid4()
 
 
 def document_public_id(value: uuid.UUID) -> str:
-    """Return the external/public representation of a document UUID."""
+    """
+    Return the public representation of a document UUID.
+    """
     if not isinstance(value, uuid.UUID):
         raise TypeError("DOCUMENT_ID_MUST_BE_UUID")
     if value.version != 4:
         raise ValueError("DOCUMENT_ID_MUST_BE_UUID4")
+    
     return value.hex
 
 

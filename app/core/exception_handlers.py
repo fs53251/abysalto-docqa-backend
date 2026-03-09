@@ -14,6 +14,11 @@ from app.core.request_context import get_request_id
 
 logger = logging.getLogger(__name__)
 
+# Central error-response layer: 
+#  - catches exceptions
+#  - logs unexpected ones
+#  - converts them into a uniform JSON error format
+
 
 def _sanitize_for_json(value: Any) -> Any:
     if value is None or isinstance(value, (str, int, float, bool)):

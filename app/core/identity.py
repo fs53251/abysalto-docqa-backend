@@ -4,6 +4,15 @@ import uuid
 from dataclasses import dataclass
 from typing import Literal
 
+# Request is identified either by:
+#   1) a logged-in user
+#   2) an anonymous session
+
+# It is either user_id or session_id
+# If one exists, other is None!!!
+
+# @classmethod - static method, not conected to 
+#                an instance
 
 @dataclass(frozen=True)
 class RequestIdentity:
@@ -12,6 +21,10 @@ class RequestIdentity:
     session_id: str | None = None
 
     def __post_init__(self) -> None:
+        """
+        Ensures that it is either user or session.
+        """
+
         if self.kind == "user":
             if self.user_id is None or self.session_id is not None:
                 raise ValueError("INVALID_USER_IDENTITY")
@@ -24,6 +37,7 @@ class RequestIdentity:
 
         raise ValueError("INVALID_IDENTITY_KIND")
 
+    # property -> can call log_identity as attribute req.log_identity
     @property
     def log_identity(self) -> str:
         if self.kind == "user":
@@ -33,6 +47,7 @@ class RequestIdentity:
     @classmethod
     def for_user(cls, user_id: uuid.UUID | str) -> "RequestIdentity":
         parsed = user_id if isinstance(user_id, uuid.UUID) else uuid.UUID(str(user_id))
+
         return cls(kind="user", user_id=parsed, session_id=None)
 
     @classmethod
@@ -40,4 +55,5 @@ class RequestIdentity:
         normalized = session_id.strip()
         if not normalized:
             raise ValueError("SESSION_ID_REQUIRED")
+        
         return cls(kind="session", user_id=None, session_id=normalized)

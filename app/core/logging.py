@@ -11,6 +11,12 @@ from typing import Any
 from app.core.config import settings
 from app.core.request_context import get_identity, get_request_id
 
+# Logging configuration modul:
+#   1) UTC timestamp helper
+#   2) context object for log metadata
+#   3) injects request_id and identity into every log record
+#   4) custom JSON log formatter
+#   5) logging based on app settings
 
 def _iso_utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -22,10 +28,16 @@ class _LogContext:
     identity: str | None
 
 
+# Filter inspect/modify each LogRecord before it is formatted and emitted.
 class ContextFilter(logging.Filter):
-    """Inject request-scoped fields into LogRecord."""
+    """
+    Inject request-id and identity field into LogRecord.
+    """
 
-    def filter(self, record: logging.LogRecord) -> bool:  # noqa: A003
+    def filter(self, record: logging.LogRecord) -> bool:
+        """
+        This method is called for each log entry!!!
+        """
         ctx = _LogContext(request_id=get_request_id(), identity=get_identity())
         record.request_id = getattr(record, "request_id", None) or ctx.request_id
         record.identity = getattr(record, "identity", None) or ctx.identity
@@ -33,7 +45,14 @@ class ContextFilter(logging.Filter):
 
 
 class JsonFormatter(logging.Formatter):
-    """A small JSON formatter without external dependencies."""
+    """
+    A small JSON formatter. 
+    Each log entry converts into JSON.
+    
+    Example: '20:21:01 | user123 | logged_in' converts
+    into {date: '20:21:01', user_email: 'user123', ...}
+
+    """
 
     def format(self, record: logging.LogRecord) -> str:
         payload: dict[str, Any] = {
@@ -77,9 +96,16 @@ class JsonFormatter(logging.Formatter):
         return json.dumps(payload, ensure_ascii=False)
 
 
+# logger -> filter -> formatter -> handler -> stdout
 def configure_logging() -> None:
+    """
+    Build full logging configuration.
+    """
+
     level = getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO)
 
+    # Warning levels: DEBUG -> INFO -> WARNING -> ERROR -> CRITICAL
+    # Set next libraries from INFO -> WARNING!!!
     for noisy in (
         "httpx",
         "httpcore",
@@ -105,12 +131,18 @@ def configure_logging() -> None:
     cfg: dict[str, Any] = {
         "version": 1,
         "disable_existing_loggers": False,
+
+        # Adding my custom logging filter, adds (req_id, identity)
         "filters": {
             "context": {"()": "app.core.logging.ContextFilter"},
         },
+
+        # Adding my custom formatter (basic/JSON)
         "formatters": {
             "default": formatter,
         },
+
+        # Handling logger that writes to stdout
         "handlers": {
             "stdout": {
                 "class": "logging.StreamHandler",
@@ -120,15 +152,20 @@ def configure_logging() -> None:
                 "level": level,
             }
         },
+
+        # The main default behaviour for my app
         "root": {
             "handlers": ["stdout"],
             "level": level,
         },
         "loggers": {
+            # 127.0.0.1:12345 - "GET /health HTTP/1.1" 200
+            # propagete=True -> passes records to root logger
             "uvicorn.access": {
                 "level": level,
                 "propagate": True,
             },
+
             "app.access": {
                 "level": level,
                 "propagate": True,
