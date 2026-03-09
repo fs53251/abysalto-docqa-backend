@@ -11,8 +11,9 @@ from typing import Literal
 # It is either user_id or session_id
 # If one exists, other is None!!!
 
-# @classmethod - static method, not conected to 
+# @classmethod - static method, not conected to
 #                an instance
+
 
 @dataclass(frozen=True)
 class RequestIdentity:
@@ -55,5 +56,5 @@ class RequestIdentity:
         normalized = session_id.strip()
         if not normalized:
             raise ValueError("SESSION_ID_REQUIRED")
-        
+
         return cls(kind="session", user_id=None, session_id=normalized)

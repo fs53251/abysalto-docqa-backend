@@ -14,7 +14,7 @@ from app.core.request_context import get_request_id
 
 logger = logging.getLogger(__name__)
 
-# Central error-response layer: 
+# Central error-response layer:
 #  - catches exceptions
 #  - logs unexpected ones
 #  - converts them into a uniform JSON error format

@@ -6,7 +6,7 @@ from typing import Any
 from fastapi import HTTPException
 
 # This file creates a clean bridge between
-# internal business errors and 
+# internal business errors and
 # HTTP responses in a FastAPI application.
 
 
@@ -90,6 +90,7 @@ class ErrorPayload:
     error_code: str
     message: str
     details: Any | None = None
+
 
 class ApiError(HTTPException):
     """

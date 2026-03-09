@@ -6,7 +6,6 @@ from typing import Literal
 from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
 # Security default values.
 _DEFAULT_SECRET_VALUES = {
     "CHANGE_ME",
@@ -21,6 +20,7 @@ class Settings(BaseSettings):
     Project central config.
     Each variable can be overriden by '.env' file
     """
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -53,8 +53,8 @@ class Settings(BaseSettings):
     SESSION_COOKIE_SECRET: str = "CHANGE_ME_TOO"
     SESSION_COOKIE_SECURE: bool = False
     SESSION_COOKIE_SAMESITE: Literal["lax", "strict", "none"] = "lax"
-    SESSION_COOKIE_MAX_AGE_SECONDS: int = 7 * 24 * 60 * 60 # Using seconds
-    SESSION_TTL_DAYS: int | None = None # Using days
+    SESSION_COOKIE_MAX_AGE_SECONDS: int = 7 * 24 * 60 * 60  # Using seconds
+    SESSION_TTL_DAYS: int | None = None  # Using days
 
     # JWT auth settings
     JWT_SECRET: str = "CHANGE_ME"
@@ -74,9 +74,9 @@ class Settings(BaseSettings):
     # to call to call my API from a browser
     # Cross-origin resource sharing
     CORS_ALLOW_ORIGINS: tuple[str, ...] = (
-        "http://localhost:3000", # frontend
+        "http://localhost:3000",  # frontend
         "http://127.0.0.1:3000",
-        "http://localhost:8501", # Streamlit
+        "http://localhost:8501",  # Streamlit
         "http://127.0.0.1:8501",
     )
 

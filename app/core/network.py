@@ -10,6 +10,7 @@ from app.core.config import settings
 # when another server is standing in front of the app.
 # Avoids trusting fake IP headers from untrusted clients!!!
 
+
 def _is_ip_in_trusted_networks(host: str) -> bool:
     """
     Check if IP belongs to trusty proxy from my config.

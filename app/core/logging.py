@@ -18,6 +18,7 @@ from app.core.request_context import get_identity, get_request_id
 #   4) custom JSON log formatter
 #   5) logging based on app settings
 
+
 def _iso_utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -46,9 +47,9 @@ class ContextFilter(logging.Filter):
 
 class JsonFormatter(logging.Formatter):
     """
-    A small JSON formatter. 
+    A small JSON formatter.
     Each log entry converts into JSON.
-    
+
     Example: '20:21:01 | user123 | logged_in' converts
     into {date: '20:21:01', user_email: 'user123', ...}
 
@@ -131,17 +132,14 @@ def configure_logging() -> None:
     cfg: dict[str, Any] = {
         "version": 1,
         "disable_existing_loggers": False,
-
         # Adding my custom logging filter, adds (req_id, identity)
         "filters": {
             "context": {"()": "app.core.logging.ContextFilter"},
         },
-
         # Adding my custom formatter (basic/JSON)
         "formatters": {
             "default": formatter,
         },
-
         # Handling logger that writes to stdout
         "handlers": {
             "stdout": {
@@ -152,7 +150,6 @@ def configure_logging() -> None:
                 "level": level,
             }
         },
-
         # The main default behaviour for my app
         "root": {
             "handlers": ["stdout"],
@@ -165,7 +162,6 @@ def configure_logging() -> None:
                 "level": level,
                 "propagate": True,
             },
-
             "app.access": {
                 "level": level,
                 "propagate": True,
