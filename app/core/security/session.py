@@ -6,8 +6,13 @@ from itsdangerous import BadSignature, URLSafeSerializer
 
 from app.core.config import settings
 
+# Handle creating, signing and reading session cookies
+
 
 def _serializer() -> URLSafeSerializer:
+    """
+    Signs and verifies cookie values.
+    """
     return URLSafeSerializer(
         secret_key=settings.SESSION_COOKIE_SECRET,
         salt=f"{settings.APP_NAME}:session",
@@ -19,6 +24,9 @@ def generate_session_id() -> str:
 
 
 def dump_session_cookie(session_id: str) -> str:
+    """
+    Raw session ID -> signed cookie value
+    """
     return _serializer().dumps({"sid": session_id})
 
 

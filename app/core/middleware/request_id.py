@@ -33,4 +33,5 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
 
         response: Response = await call_next(request)
         response.headers[self.header_name] = rid
+
         return response

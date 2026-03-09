@@ -16,7 +16,7 @@ class SessionIdentityMiddleware(BaseHTTPMiddleware):
     """
     Ensure every anonymous request has a stable signed session cookie.
 
-    - On missing/invalid cookie, generate a fresh UUIDv4 session id.
+    - On missing or invalid cookie, generate a fresh UUIDv4 session id.
     - Expose the raw session id on request.state.session_id.
     - Set a signed cookie only when a new session had to be issued.
     """
@@ -35,6 +35,10 @@ class SessionIdentityMiddleware(BaseHTTPMiddleware):
 
         response: Response = await call_next(request)
 
+        # 7 day cookie session
+        # httponly - javascript in browser cannot read it
+        # secure - HTTPS
+        # Set-Cookie: docqa_session=<signed abc-123>; HttpOnly; Path=/; Max-Age=...
         if must_set_cookie:
             response.set_cookie(
                 key=settings.SESSION_COOKIE_NAME,

@@ -9,16 +9,30 @@ from jwt import ExpiredSignatureError, InvalidTokenError
 
 from app.core.config import settings
 
+# Stateless auth tokens
+
 
 class TokenError(ValueError):
+    """
+    Token related failures
+    """
+
     pass
 
 
 class TokenExpiredError(TokenError):
+    """
+    Used when the token is valid but expired
+    """
+
     pass
 
 
 class TokenInvalidError(TokenError):
+    """
+    Used when the token is missing or invalid
+    """
+
     pass
 
 
@@ -26,8 +40,8 @@ class TokenInvalidError(TokenError):
 #   - sub: subject (user id)...UUID user_id
 #   - exp: expiration time
 #   - iat: issued at
-#   - iss: issuer
-#   - aud: audience
+#   - iss: issuer (not used here)
+#   - aud: audience (not used here)
 
 
 def create_access_token(
@@ -49,6 +63,11 @@ def create_access_token(
     if extra_claims:
         payload.update(extra_claims)
 
+    # signs the payload and returns JWT string
+    # alg - HS256 - HMAC-SHA256
+    #   - the same secret for signing token
+    #   - the same secret for verifying token
+    # JWT: header.payload.signature
     return jwt.encode(
         payload,
         settings.JWT_SECRET,

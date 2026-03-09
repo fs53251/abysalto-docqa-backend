@@ -7,6 +7,11 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
+# Middleware wraps every HTTP request
+# Logs when it starts and ends
+# Measures latency, attaches request identity and request ID
+
+# Creating logger, mentioned in core config
 logger = logging.getLogger("app.access")
 
 
@@ -28,6 +33,7 @@ def _request_identity(request: Request) -> str:
     return "-"
 
 
+# request -> middleware -> route handler -> middleware -> response
 class AccessLoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
         started_at = time.perf_counter()
