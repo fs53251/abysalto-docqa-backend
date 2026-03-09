@@ -513,8 +513,6 @@ docker compose down
 
 ## Example API requests and responses
 
-> The examples below are intentionally written in a way that you can copy into your README as-is and use in your presentation.
-
 ### 1) Register a user
 
 ```bash
