@@ -37,12 +37,6 @@
 - [Configuration and secrets](#configuration-and-secrets)
 - [API reference](#api-reference)
 - [Example API requests and responses](#example-api-requests-and-responses)
-- [UI walkthrough](#ui-walkthrough)
-- [Testing and quality](#testing-and-quality)
-- [How to record and embed a demo video](#how-to-record-and-embed-a-demo-video)
-- [Troubleshooting](#troubleshooting)
-- [What this final Dockerized project gives you](#what-this-final-dockerized-project-gives-you)
-- [Roadmap](#roadmap)
 
 ---
 

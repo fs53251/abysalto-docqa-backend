@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from app.core.config import settings
 
+# Model for authentication Request/Response
 
 def _normalize_email(value: object) -> object:
     if isinstance(value, str):

@@ -8,6 +8,7 @@ from app.core.config import settings
 from app.core.identifiers import parse_document_public_id
 from app.models.ner import Entity
 
+# Model for /ask endpoint: Request/Response
 
 class AskRequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=settings.MAX_QUESTION_CHARS)
@@ -15,6 +16,7 @@ class AskRequest(BaseModel):
     scope: Literal["all", "docs"] = "all"
     top_k: int = Field(default=settings.DEFAULT_TOP_K, ge=1, le=settings.MAX_TOP_K)
 
+    # executes on 'question' before standard validation with Field
     @field_validator("question", mode="before")
     @classmethod
     def normalize_question(cls, value: object) -> object:
