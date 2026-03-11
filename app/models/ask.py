@@ -10,6 +10,7 @@ from app.models.ner import Entity
 
 # Model for /ask endpoint: Request/Response
 
+
 class AskRequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=settings.MAX_QUESTION_CHARS)
     doc_ids: list[str] | None = None

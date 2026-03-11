@@ -9,6 +9,7 @@ from app.core.config import settings
 
 # Model for authentication Request/Response
 
+
 def _normalize_email(value: object) -> object:
     if isinstance(value, str):
         return value.strip().lower()

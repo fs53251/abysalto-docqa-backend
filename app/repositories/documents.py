@@ -19,6 +19,9 @@ def _validate_owner_identity(
     owner_user_id: uuid.UUID | None,
     owner_session_id: str | None,
 ) -> None:
+    """
+    This removes ambiguity, it is only OWNER_ID or SESSION_ID!
+    """
     if owner_user_id is None and not owner_session_id:
         raise ValueError("DOCUMENT_OWNER_REQUIRED")
     if owner_user_id is not None and owner_session_id is not None:
@@ -26,6 +29,16 @@ def _validate_owner_identity(
 
 
 def _ownership_filter(identity: RequestIdentity):
+    """
+    Ownership document filter.
+    Filter documents by:
+        1) user_id
+        2) session_id (user_id must be None)
+
+    Result:
+        function builds SQLAlchemy WHERE condition
+        for filtering Documents
+    """
     if identity.kind == "user":
         return Document.owner_user_id == identity.user_id
 
@@ -122,6 +135,10 @@ def assert_documents_owned_by_identity(
     doc_ids: Iterable[uuid.UUID],
     identity: RequestIdentity,
 ) -> list[Document]:
+    """
+    This returns list of documents for user
+    but without duplicates!
+    """
     ordered_ids: list[uuid.UUID] = []
     seen: set[uuid.UUID] = set()
 
@@ -157,6 +174,9 @@ def get_document_for_session(
     doc_id: uuid.UUID,
     session_id: str,
 ) -> Document:
+    """
+    Wrapper for fetching session document (doc_id)
+    """
     return get_document_for_identity(
         db,
         doc_id=doc_id,
@@ -165,6 +185,9 @@ def get_document_for_session(
 
 
 def list_documents_for_user(db: Session, *, user_id: uuid.UUID) -> list[Document]:
+    """
+    Wrapper for fetching user documents
+    """
     return list_documents_for_identity(
         db,
         identity=RequestIdentity.for_user(user_id),
@@ -172,6 +195,9 @@ def list_documents_for_user(db: Session, *, user_id: uuid.UUID) -> list[Document
 
 
 def list_documents_for_session(db: Session, *, session_id: str) -> list[Document]:
+    """
+    Wrapper for fetching session documents
+    """
     return list_documents_for_identity(
         db,
         identity=RequestIdentity.for_session(session_id),
@@ -184,6 +210,14 @@ def claim_session_documents_for_user(
     session_id: str,
     user_id: uuid.UUID,
 ) -> int:
+    """
+    While in session mode, you can upload documents and claim them
+    when you log in. It is called 'claiming session documents for user'
+
+    Update document owner: session_id -> user_id
+
+    This is advanced option for better UI/UX
+    """
     stmt = (
         update(Document)
         .where(
