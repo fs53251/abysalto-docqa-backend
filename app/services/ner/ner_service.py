@@ -25,7 +25,7 @@ class NerService:
         if self._nlp is None:
             try:
                 import spacy
-            except ModuleNotFoundError as exc:  # pragma: no cover
+            except ModuleNotFoundError as exc:
                 raise ExternalDependencyMissing("spacy") from exc
             self._nlp = spacy.load(self.model_name)
 

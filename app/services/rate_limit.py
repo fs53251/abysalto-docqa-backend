@@ -19,7 +19,11 @@ from app.services.interfaces import RedisClientPort
 
 logger = logging.getLogger(__name__)
 
+# limit, window_seconds are int or function that returns int
 IntProvider: TypeAlias = int | Callable[[], int]
+
+# Function that recieves request, identity
+# returns string or async string result
 RateLimitKeyFn: TypeAlias = Callable[
     [Request, RequestIdentity],
     str | Awaitable[str],
@@ -27,12 +31,18 @@ RateLimitKeyFn: TypeAlias = Callable[
 
 
 def _resolve_int(value: IntProvider) -> int:
+    """
+    Normalizes IntProvider into a real integer.
+    """
     if callable(value):
         return int(value())
     return int(value)
 
 
 async def _maybe_await(value: str | Awaitable[str]) -> str:
+    """
+    Wait for string.
+    """
     if inspect.isawaitable(value):
         return str(await value)
     return str(value)
@@ -49,13 +59,24 @@ class RedisRateLimiter:
         limit: int,
         window_seconds: int,
     ) -> tuple[int, int]:
+        """
+        Records one request and retuns:
+            - count: how many hits happened in the curr_window
+            - ttl: how many seconds remain before reset
+        """
+
+        # Every request in the same 60-seconds window uses
+        # the same Redis key
         bucket = int(time.time()) // window_seconds
         redis_key = f"rl:{key}:{bucket}"
 
         count = int(self.client.incr(redis_key))
+
+        # On first request, set counter ttl to 60sec
         if count == 1:
             self.client.expire(redis_key, window_seconds)
 
+        # Returns current ttl for this redis_key
         ttl_raw = self.client.ttl(redis_key)
         try:
             ttl = int(ttl_raw)
@@ -65,10 +86,15 @@ class RedisRateLimiter:
         if ttl <= 0:
             ttl = max(1, window_seconds - (int(time.time()) % window_seconds))
 
+        # count: how many hits so far
+        # ttl: when will this bucket rest
         return count, ttl
 
 
 def identity_rate_limit_key(namespace: str) -> RateLimitKeyFn:
+    """
+    Creates a key based on the authenticated/request identity.
+    """
     def _key(request: Request, identity: RequestIdentity) -> str:
         del request
         return f"{namespace}:{identity.log_identity}"
@@ -77,6 +103,10 @@ def identity_rate_limit_key(namespace: str) -> RateLimitKeyFn:
 
 
 def login_rate_limit_key(namespace: str = "login") -> RateLimitKeyFn:
+    """
+    Creates specialized key for login attempts:
+        Uses client IP and email from request body
+    """
     async def _key(request: Request, identity: RequestIdentity) -> str:
         del identity
 
@@ -106,11 +136,27 @@ def rate_limit(
     window_seconds: IntProvider,
     key_fn: RateLimitKeyFn,
 ):
+    """
+    Returns FastAPI dependency.
+    Attach this dependency to a route, on every request:
+        - figure out the rate limit key
+        - increment a counter in Redis
+        - check whether the request count exceeded
+        - raise ApiError(429)
+
+    Protection like:
+        - login brute-force protection
+        - per-user API
+        - per-IP request
+    """
     async def _dependency(
         request: Request,
         identity: CurrentIdentity,
         redis_client: RedisClientPort | None = Depends(get_optional_redis_client),
     ) -> None:
+        """
+        FastAPI injects request, identity and redis_client
+        """
         if not settings.ENABLE_RATE_LIMITING:
             return
 

@@ -80,8 +80,8 @@ app.add_middleware(
 
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(SessionIdentityMiddleware)
-app.add_middleware(AccessLoggingMiddleware)
 app.add_middleware(RequestIdMiddleware)
+app.add_middleware(AccessLoggingMiddleware)
 
 app.include_router(health_router)
 app.include_router(auth_router)

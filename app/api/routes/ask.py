@@ -41,19 +41,24 @@ from app.storage.faiss_store import get_faiss_index_path
 router = APIRouter(tags=["qa"])
 logger = logging.getLogger(__name__)
 
+# Rate-limit requests to /ask
 ask_rate_limit = rate_limit(
     limit=lambda: settings.ASK_RATE_LIMIT_PER_MIN,
     window_seconds=lambda: settings.RATE_LIMIT_WINDOW_SECONDS,
     key_fn=identity_rate_limit_key("ask"),
 )
 
-
+# Hash a set of document IDs
 def _docs_digest(doc_ids: list[str]) -> str:
     return hashlib.sha256(",".join(sorted(set(doc_ids))).encode("utf-8")).hexdigest()[
         :16
     ]
 
 
+# Build cache namespace representing:
+#   - who is asking
+#   - scope "docs" or "identity"
+#   - which documents are included
 def _scope_cache_key(
     identity: RequestIdentity, scope_mode: str, doc_ids: list[str]
 ) -> str:
@@ -62,7 +67,8 @@ def _scope_cache_key(
     ]
     return f"{scope_mode}:{identity_hash}:{_docs_digest(doc_ids)}"
 
-
+# Find all documents owned by the current identity
+# Documents must be indexed and ready for retrieval
 def _resolve_identity_indexed_scope(
     db, identity: RequestIdentity
 ) -> tuple[list[str], dict[str, str]]:
@@ -77,6 +83,7 @@ def _resolve_identity_indexed_scope(
     return doc_ids, filename_by_doc_id
 
 
+# User explicitly says which documents to search
 def _resolve_requested_scope(
     db, identity: RequestIdentity, requested_doc_ids: list[str]
 ) -> tuple[list[str], dict[str, str]]:
@@ -93,6 +100,7 @@ def _resolve_requested_scope(
         seen.add(public_id)
         parsed_doc_ids.append(parsed_doc_id)
 
+    # Requested documents belong to the current identity
     owned_documents = assert_documents_owned_by_identity(
         db, doc_ids=parsed_doc_ids, identity=identity
     )
@@ -106,7 +114,7 @@ def _resolve_requested_scope(
         filename_by_doc_id[public_id] = document.filename
     return doc_ids, filename_by_doc_id
 
-
+# Retrieved chunk objects -> plain dictionary
 def _serialize_hits(hits: list[RetrievedChunk]) -> list[dict[str, object]]:
     return [
         {
@@ -125,6 +133,7 @@ def _serialize_hits(hits: list[RetrievedChunk]) -> list[dict[str, object]]:
     ]
 
 
+# Plain dictionary -> Retrieved chunk objects
 def _deserialize_hits(items: list[dict[str, object]]) -> list[RetrievedChunk]:
     hits: list[RetrievedChunk] = []
     for item in items:
@@ -175,10 +184,12 @@ def ask(
     del _rate_limit
     started_at = time.perf_counter()
 
+    # Validate question
     question_raw = body.question
     if not question_raw:
         raise InvalidInput("Question must not be empty.")
 
+    # Document scope: docs / identity
     if body.doc_ids:
         doc_ids, filename_by_doc_id = _resolve_requested_scope(
             db, identity, body.doc_ids
@@ -195,7 +206,11 @@ def ask(
 
     normalized_question = normalize_question(question_raw)
     top_k = body.top_k
+
+    # Identify querying user + scope + docs
     cache_scope = _scope_cache_key(identity, scope_mode, doc_ids)
+
+    # Cache keys depends not only on the question
     pipeline_version = (
         f"qa={settings.QA_MODEL_NAME}|emb={settings.EMBEDDING_MODEL_NAME}|"
         f"chunk={settings.CHUNK_SIZE_CHARS}-{settings.CHUNK_OVERLAP_CHARS}-{settings.CHUNK_MIN_CHARS}"
