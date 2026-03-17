@@ -46,6 +46,9 @@ def _load_embeddings_matrix(doc_id: str) -> np.ndarray:
 
 
 def build_faiss_index(doc_id: str) -> FaissBuildResult:
+    """
+    Builds and saves a FAISS index for one document.
+    """
     ensure_dir(get_faiss_index_path(doc_id).parent)
 
     info = _read_embeddings_info(doc_id)
@@ -61,13 +64,19 @@ def build_faiss_index(doc_id: str) -> FaissBuildResult:
 
     try:
         import faiss
-    except ModuleNotFoundError as exc:  # pragma: no cover
+    except ModuleNotFoundError as exc:
         raise ExternalDependencyMissing("faiss-cpu") from exc
 
+    # IndexFlatL2 -> non normalized embeddings
+    # IndexFlatIP -> for normalized embeddings (same as cosine similarity)
+    # Flat -> brute-force indexes (compare emb query to all in base)!!!
     index = faiss.IndexFlatIP(dim) if normalize else faiss.IndexFlatL2(dim)
     index.add(matrix)
 
     index_path = get_faiss_index_path(doc_id)
+
+    # Write binary FAISS index file
+    # FAISS own serialized index format
     faiss.write_index(index, str(index_path))
 
     meta = {
@@ -97,9 +106,12 @@ def build_faiss_index(doc_id: str) -> FaissBuildResult:
 
 
 def load_faiss_index(doc_id: str):
+    """
+    Loads an already-built FAISS index from disk.
+    """
     try:
         import faiss
-    except ModuleNotFoundError as exc:  # pragma: no cover
+    except ModuleNotFoundError as exc:
         raise ExternalDependencyMissing("faiss-cpu") from exc
 
     path = get_faiss_index_path(doc_id)
@@ -111,6 +123,16 @@ def load_faiss_index(doc_id: str):
 def search_index(
     index: Any, query_vec: np.ndarray, top_k: int
 ) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Runs nearest-neighbor search against a FAISS index.
+
+    Return:
+        - scores (inner product query_emb & chunks_index_emb)
+        - row indices
+    """
+
+    # FAISS expect query input in shape: (N, D)
+    # .reshape(1, -1), first dim is 1, infer the second dim automatically
     query = (
         query_vec.reshape(1, -1).astype(np.float32)
         if query_vec.ndim == 1

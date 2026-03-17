@@ -9,6 +9,12 @@ from PIL import Image
 from app.core.config import settings
 from app.core.errors import ExternalDependencyMissing
 
+# EasyOCR usually returns items shaped like:
+# [
+#   [bbox, text, confidence],
+#   [bbox. text, confidence]
+# ]
+
 
 @dataclass(frozen=True)
 class OcrResult:
@@ -17,6 +23,8 @@ class OcrResult:
     lines: int
 
 
+# (left, top) -> (x, y) coordinates of the
+# bounding box
 @dataclass(frozen=True)
 class _OcrLine:
     text: str
@@ -27,21 +35,33 @@ class _OcrLine:
 
 @lru_cache(maxsize=1)
 def get_easyocr_reader():
+    """
+    Creates the EasyOCR reader. The first call
+    creates the reader, and later calls reuse
+    the same one from cache.
+    """
     try:
         import easyocr
-    except ModuleNotFoundError as exc:  # pragma: no cover
+    except ModuleNotFoundError as exc:
         raise ExternalDependencyMissing("easyocr") from exc
 
     return easyocr.Reader(list(settings.EASYOCR_LANGS), gpu=settings.EASYOCR_GPU)
 
 
 def _io_bytes(payload: bytes):
+    """
+    Raw bytes -> In-Memory object.
+    Because PIL.Image.open() expects file-like object!
+    """
     import io
 
     return io.BytesIO(payload)
 
 
 def _safe_pil_open(image_bytes: bytes) -> Image.Image:
+    """
+    Opens raw image bytes with PIL and validates size.
+    """
     img = Image.open(_io_bytes(image_bytes))
     img.load()
 
@@ -61,12 +81,19 @@ def _safe_float(value: object) -> float | None:
 
 
 def _parse_line(item: object) -> _OcrLine | None:
+    """
+    Converts one raw EasyOCR result into _OcrLine.
+    """
     if not isinstance(item, (list, tuple)) or len(item) < 3:
         return None
 
+    # EasyOCR retuns: [[bbox, text, confidence], ...]
+
+    # [(x1, y1), (x2, y2), (x3, y3), (x4, y4)]
     bbox = item[0]
     text = str(item[1] or "").strip()
     confidence = _safe_float(item[2])
+
     if not text:
         return None
 
@@ -84,6 +111,9 @@ def _parse_line(item: object) -> _OcrLine | None:
 
 def ocr_image_bytes(image_bytes: bytes) -> OcrResult:
     img = _safe_pil_open(image_bytes)
+
+    # EasyOCR works with NumPy arrays!!
+    # arr: tensor (height, width, 3)
     arr = np.array(img)
 
     reader = get_easyocr_reader()
@@ -92,6 +122,9 @@ def ocr_image_bytes(image_bytes: bytes) -> OcrResult:
     lines = [
         parsed for item in raw_results if (parsed := _parse_line(item)) is not None
     ]
+
+    # Sorting lines that are returned by EasyOcr
+    # Sort in order (approximately same row, concrete row, horizontal pos)
     lines.sort(key=lambda line: (round(line.top / 12), line.top, line.left))
 
     texts = [line.text for line in lines]

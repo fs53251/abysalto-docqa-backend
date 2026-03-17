@@ -18,7 +18,7 @@ class EmbedConfig:
 
 class EmbeddingService:
     """
-    Singleton service (load this only once, optimization)
+    Embedding model.
     """
 
     def __init__(self, cfg: EmbedConfig):
@@ -29,7 +29,7 @@ class EmbeddingService:
         if self._model is None:
             try:
                 from sentence_transformers import SentenceTransformer
-            except ModuleNotFoundError as e:  # pragma: no cover
+            except ModuleNotFoundError as e:
                 raise ExternalDependencyMissing("sentence-transformers") from e
 
             self._model = SentenceTransformer(self.cfg.model_name)

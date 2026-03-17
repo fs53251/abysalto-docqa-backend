@@ -14,7 +14,11 @@ from app.services.ingestion.ocr import ocr_image_bytes
 from app.storage.files import ensure_dir
 from app.storage.processed import get_text_json_path
 
+# PDF text extraction
+
+# Regex: space, tab, vertical tab...
 INLINE_WS_RE = re.compile(r"[ \t\x0b\x0c\r]+")
+
 MULTI_BLANK_RE = re.compile(r"\n{3,}")
 
 
@@ -36,6 +40,9 @@ class ExtractedText:
 
 
 def normalize_text(value: str) -> str:
+    """
+    Normalize text into clear paragraphs.
+    """
     value = str(value or "").replace("\x00", " ")
     value = value.replace("\r\n", "\n").replace("\r", "\n")
 
@@ -60,7 +67,15 @@ def normalize_text(value: str) -> str:
 
 
 def _render_page_png_bytes(page: fitz.Page, dpi: int) -> bytes:
+    """
+    Convert a PDF page into a PNG image in memory.
+    """
+
+    # Render the vector PDF page into raster pixels
+    # Higher dpi: better OCR, bigger memory
     pix = page.get_pixmap(dpi=dpi)
+
+    # pixmap -> PNG bytes (binary img stream)
     return pix.tobytes("png")
 
 
@@ -72,6 +87,7 @@ def extract_pdf_text_per_page(
     except Exception as exc:
         raise ValueError(f"INVALID_PDF: {exc}") from exc
 
+    # PDF may be encripted, try opening with empty pass
     if doc.is_encrypted:
         ok = doc.authenticate("")
         if not ok and doc.is_encrypted:
@@ -85,6 +101,8 @@ def extract_pdf_text_per_page(
 
     pages: list[PageText] = []
     for index in range(page_count):
+
+        # Return Page object
         page = doc.load_page(index)
         extracted = normalize_text(page.get_text("text"))
         char_count = len(extracted)

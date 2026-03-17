@@ -43,12 +43,18 @@ STOPWORDS = {
     "why",
     "with",
 }
+
+# Intent and field patterns
+
+# SUMMARY INTENT
 SUMMARY_PATTERNS = (
     re.compile(r"\bwhat(?:'s| is) this document about\b", re.I),
     re.compile(r"\bsummar(?:y|ize|ise)\b", re.I),
     re.compile(r"\boverview\b", re.I),
     re.compile(r"\bdescribe (?:this|the) document\b", re.I),
 )
+
+# PURPOSE INTENT
 PURPOSE_PATTERNS = (
     re.compile(r"\bused for\b", re.I),
     re.compile(r"\buse of this document\b", re.I),
@@ -56,6 +62,8 @@ PURPOSE_PATTERNS = (
     re.compile(r"\bwhat can this document be used for\b", re.I),
     re.compile(r"\bwhy (?:would|might) (?:someone|a user) use\b", re.I),
 )
+
+# FIELD PATTERN - invoices!!!
 FIELD_PATTERNS: dict[str, tuple[re.Pattern[str], ...]] = {
     "total_due": (
         re.compile(r"\btotal (?:invoice )?(?:amount|price|due|cost)\b", re.I),
@@ -89,7 +97,10 @@ FIELD_PATTERNS: dict[str, tuple[re.Pattern[str], ...]] = {
         re.compile(r"\bwhat currency\b", re.I),
     ),
 }
+
+# Bad answers
 GENERIC_ANSWERS = {"[cls]", "[sep]", "[pad]", "the", "a", "an"}
+
 MoneyField = Literal["total_due", "subtotal", "vat"]
 DateField = Literal["due_date", "issue_date"]
 LookupField = Literal[
@@ -104,6 +115,7 @@ LookupField = Literal[
 QuestionIntent = Literal["summary", "purpose", "field_lookup", "freeform"]
 
 
+# Final output of the whole /ask pipeline
 @dataclass(frozen=True)
 class AskPipelineResult:
     answer: str
@@ -114,6 +126,7 @@ class AskPipelineResult:
     sources: list[RetrievedChunk]
 
 
+# Internal representation of one candiate support sentence
 @dataclass(frozen=True)
 class _EvidenceSentence:
     source: RetrievedChunk
@@ -121,6 +134,7 @@ class _EvidenceSentence:
     score: float
 
 
+# Heuristic invoice extract
 @dataclass(frozen=True)
 class InvoiceFields:
     looks_like_invoice: bool
@@ -160,6 +174,9 @@ def _split_sentences(text: str) -> list[str]:
 
 
 def _sentence_match_score(sentence: str, query_terms: list[str]) -> float:
+    """
+    Coverage of query terms within the sentence.
+    """
     if not sentence or not query_terms:
         return 0.0
     normalized = sentence.lower()
@@ -171,9 +188,15 @@ def _sentence_match_score(sentence: str, query_terms: list[str]) -> float:
 def _collect_evidence(
     question: str, sources: list[RetrievedChunk]
 ) -> list[_EvidenceSentence]:
+    """
+    Retrieved chunks -> set of best supporting sentences
+
+    Final evidence, small, high-quality deduplicated sentence list
+    """
     query_terms = _query_terms(question)
     evidence: list[_EvidenceSentence] = []
 
+    # Calculate evidence using 70% sentence lexical match, 30% chunk retrieval score
     for source in sources:
         text = (source.text or source.text_snippet or "").strip()
         if not text:
@@ -203,6 +226,9 @@ def _collect_evidence(
 
 
 def _classify_intent(question: str) -> QuestionIntent:
+    """
+    Summary / Purpose / Field Lookup / Freeform
+    """
     normalized = clean_question(question).lower()
     if any(pattern.search(normalized) for pattern in SUMMARY_PATTERNS):
         return "summary"
@@ -217,7 +243,7 @@ def _requested_field(question: str) -> LookupField | None:
     normalized = clean_question(question).lower()
     for field_name, patterns in FIELD_PATTERNS.items():
         if any(pattern.search(normalized) for pattern in patterns):
-            return field_name  # type: ignore[return-value]
+            return field_name
     return None
 
 
@@ -424,6 +450,9 @@ def _build_generation_context(
     evidence: list[_EvidenceSentence],
     sources: list[RetrievedChunk],
 ) -> str:
+    """
+    Builds the context string that is sent to QA model!
+    """
     if intent == "summary":
         style = "Return a concise summary in at most three sentences."
     elif intent == "purpose":
@@ -450,6 +479,8 @@ def _build_generation_context(
                 )
 
     document_type = "invoice" if fields.looks_like_invoice else "general_document"
+
+    # CONTEXT
     lines = [
         f"intent={intent}",
         f"document_type={document_type}",
@@ -521,7 +552,28 @@ def _confidence_from_evidence(
 def answer_with_sources(
     *, question: str, sources: list[RetrievedChunk], qa: QaServicePort
 ) -> AskPipelineResult:
+    """
+    Final QA pipeline for one question.
+
+    Args:
+        - question: what the user asked
+        - sources: retrieved chunks from the document
+        - qa: QA service that generates a polished answer
+
+    Returns:
+        AskPipelineResult:
+            - final answer
+            - confidence
+            - confidence label (high / medium / low)
+            - answer grounded in evidence
+            - message
+            - source chunks
+    """
+
+    # Normalize question
     normalized_question = clean_question(question)
+
+    # Reject empty questions
     if not normalized_question:
         return AskPipelineResult(
             answer="",
@@ -532,9 +584,12 @@ def answer_with_sources(
             sources=[],
         )
 
+    # Truncate long questions
     if len(normalized_question) > settings.MAX_QUESTION_CHARS:
         normalized_question = normalized_question[: settings.MAX_QUESTION_CHARS]
 
+    # Handle missing sources, no retrieved chunks
+    # The function cannot answer from evidence
     if not sources:
         return AskPipelineResult(
             answer="I couldn't find any indexed document content to search.",
@@ -545,11 +600,26 @@ def answer_with_sources(
             sources=[],
         )
 
+    # MAIN PIPELINE
+
+    # classify question: SUMMARY / PURPOSE / FIELD_LOOKUP / FREEFORM
     intent = _classify_intent(normalized_question)
+
+    # Detect it user asked for a specific known field
     requested_field = _requested_field(normalized_question)
+
+    # Find best sentences from all chunks that match the question
+    # Extract and rank supporting sentences
     evidence = _collect_evidence(normalized_question, sources)
+
+    # Top sentence evidence score
     evidence_score = evidence[0].score if evidence else 0.0
+
+    # Try to extract invoice details
     fields = _extract_invoice_fields(sources)
+
+    # Question asks for known field, return answer
+    # without needing generation
     direct_answer = None
     if requested_field is not None:
         field_value = _field_value(fields, requested_field)
@@ -567,6 +637,8 @@ def answer_with_sources(
 
     generated_answer = ""
     generated_score: float | None = None
+
+    # Call QA only if evidence is strong enough!!!
     if evidence_score >= settings.QA_MIN_EVIDENCE_SCORE or direct_answer:
         try:
             generated = qa.answer(normalized_question, context)
@@ -606,6 +678,7 @@ def answer_with_sources(
             evidence=evidence,
         )
 
+    # Reject empty or degenerate answers
     if not answer or answer.lower() in GENERIC_ANSWERS:
         answer = _fallback_answer(
             intent=intent,

@@ -35,14 +35,18 @@ configure_logging()
 logger = logging.getLogger(__name__)
 
 
+# Runs before app starts serving requests
+# startup/shutdown logic in one place!
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # startup logic...
     if settings.HF_TOKEN:
         os.environ["HF_TOKEN"] = settings.HF_TOKEN
         os.environ["HUGGINGFACEHUB_API_TOKEN"] = settings.HF_TOKEN
 
     ensure_runtime_dirs()
 
+    # DB initialization
     try:
         from app.db.session import init_db_dev_failsafe
 
@@ -55,11 +59,16 @@ async def lifespan(app: FastAPI):
 
     init_app_services(app)
 
+    # sleep
     yield
 
+    # shutdown logic...
 
+
+# FastAPI use my custom startup logic: lifespan
 app = FastAPI(title=settings.APP_NAME, lifespan=lifespan)
 
+# Instructions to browser, who is allowed to cal my API
 app.add_middleware(
     CORSMiddleware,
     allow_origins=list(settings.CORS_ALLOW_ORIGINS),

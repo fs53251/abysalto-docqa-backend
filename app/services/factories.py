@@ -17,6 +17,10 @@ logger = logging.getLogger(__name__)
 
 
 def _should_skip_service_init() -> bool:
+    """
+    Skip init for testing.
+    Tests use mocks.
+    """
     return settings.APP_ENV == "test" or "PYTEST_CURRENT_TEST" in os.environ
 
 
@@ -28,6 +32,18 @@ def _set_service_status(
     detail: str,
     extra: dict[str, Any] | None = None,
 ) -> None:
+    """
+    Writes one service status entry into app.state.service_statuses
+
+    Example:
+        {
+            "embedding": {
+                "ready": True,
+                "detail": "initialized",
+                "model": "all-MiniLM-L6-v2"
+            }
+        }
+    """
     statuses = getattr(app.state, "service_statuses", {})
     statuses[name] = {
         "ready": ready,

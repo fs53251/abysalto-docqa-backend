@@ -70,6 +70,9 @@ class _ChunkRow:
 
 
 def _query_terms(query: str) -> list[str]:
+    """
+    Lexical query term list, without stopwords.
+    """
     terms = [
         token
         for token in TOKEN_RE.findall((query or "").lower())
@@ -79,6 +82,15 @@ def _query_terms(query: str) -> list[str]:
 
 
 def _load_row_to_chunk_id(doc_id: str) -> list[str]:
+    """
+    FAISS search returns rows like:
+        - row 17, row 41
+
+    My app needs chunks for those row numbers.
+
+    Retruns:
+        - list of chunk_ids, indexed by row
+    """
     path = get_embeddings_meta_jsonl_path(doc_id)
     if not path.exists():
         raise FileNotFoundError("EMBEDDINGS_META_NOT_FOUND")
@@ -99,6 +111,13 @@ def _load_row_to_chunk_id(doc_id: str) -> list[str]:
 
 
 def _load_chunk_map(doc_id: str) -> dict[str, _ChunkRow]:
+    """
+    Reads chunks.jsonl into dict:
+        {
+            chunk_id_0: _ChunkRow(),
+            chunk_id_1: _ChunkRow()...
+        }
+    """
     path = get_chunks_jsonl_path(doc_id)
     if not path.exists():
         raise FileNotFoundError("CHUNKS_NOT_FOUND")
@@ -122,16 +141,29 @@ def _load_chunk_map(doc_id: str) -> dict[str, _ChunkRow]:
 
 
 def _lexical_score(text: str, query_terms: list[str]) -> float:
+    """
+    Custom lexical relevance score (chunk text & query terms)
+
+    This logic is based on: BM25, TF-IDF
+    """
     if not text or not query_terms:
         return 0.0
     tokens = TOKEN_RE.findall(text.lower())
     if not tokens:
         return 0.0
 
+    # Count text word frequencies
     token_counts: dict[str, int] = {}
     for token in tokens:
         token_counts[token] = token_counts.get(token, 0) + 1
 
+    # For each query term check if it appears in the chunk:
+    #   - increment matched term
+    #   - weighted amount based on frequency:
+    #         - count = 1 ~ 1.69
+    #         - count = 2 ~ 2.10
+    #         - repeated occurrences help, not linearly
+    # This prevents long repetitive text from dominating too hard
     matched_terms = 0
     weighted_hits = 0.0
     for term in query_terms:
@@ -140,12 +172,24 @@ def _lexical_score(text: str, query_terms: list[str]) -> float:
             matched_terms += 1
             weighted_hits += 1.0 + math.log1p(count)
 
+    # how many unique query terms were found in chunk
     coverage = matched_terms / max(1, len(set(query_terms)))
+
+    # how concentrated the matches are relative to chunk len:
+    #   - short chunk: denominator at least 3
+    #   - log chunk: denominator grows with chunk size
+    #
+    #   lnger chunks need more weighted hits to get the same density!!
     density = min(1.0, weighted_hits / max(3.0, len(tokens) / 24.0))
+
     return round((coverage * 0.7) + (density * 0.3), 4)
 
 
 def _excerpt(text: str, query_terms: list[str], max_chars: int) -> str:
+    """
+    Build a short snippet from the chunk text.
+    Only the most query-relevant sentences (by lexical score)
+    """
     clean = (text or "").strip()
     if not clean:
         return ""
@@ -193,7 +237,12 @@ class RetrieverService:
         if not query or not query.strip():
             return []
 
+        # top_k: [1, MAX_TOP_K]
         top_k = max(1, min(int(top_k), settings.MAX_TOP_K))
+
+        # More k than top_k:
+        # Semantic search gives more than top_k, than
+        # Lexical search gives exact top_k best results!!!
         candidate_k = max(
             top_k,
             min(
@@ -217,6 +266,9 @@ class RetrieverService:
         results: list[RetrievedChunk] = []
         seen_chunk_ids: set[str] = set()
 
+        # For one query, shape is:
+        # scores.shape == (1, candidate_k)
+        # ids.shape == (1, candidate_k)
         for col in range(ids.shape[1]):
             row = int(ids[0, col])
             if row < 0 or row >= len(row_to_chunk_id):
@@ -232,6 +284,8 @@ class RetrieverService:
                 continue
 
             semantic_score = float(scores[0, col])
+
+            # scores for normalized and InnerProduct sim embeddings!
             semantic_score = max(0.0, semantic_score)
             lexical_score = _lexical_score(chunk.text, terms)
             if (
@@ -241,6 +295,8 @@ class RetrieverService:
             ):
                 continue
 
+            # Hybrid search, semantic 78%, lexical 22%
+            # These numbers are my heuristic!
             combined_score = round((semantic_score * 0.78) + (lexical_score * 0.22), 4)
             results.append(
                 RetrievedChunk(

@@ -31,6 +31,14 @@ class Chunk:
 
 
 def _normalize_page_text(value: str) -> str:
+    """
+    Normalize text into same paragraphs, without whitespaces.
+
+        - Remove null characters '\x00'
+        - Normalize line endings
+        - Splits text into paragraphs
+        - Cleans extra whitespace inside paragraph
+    """
     value = str(value or "").replace("\x00", " ")
     value = value.replace("\r\n", "\n").replace("\r", "\n")
     paragraphs = [paragraph.strip() for paragraph in MULTI_BLANK_RE.split(value)]
@@ -43,13 +51,20 @@ def _normalize_page_text(value: str) -> str:
 
 
 def _stable_chunk_id(doc_id: str, page: int, chunk_index: int, text: str) -> str:
+    """
+    Create chunk hash (chunk_id)
+    """
     hasher = hashlib.sha256()
     hasher.update(f"{doc_id}:{page}:{chunk_index}:".encode("utf-8"))
     hasher.update(text[:300].encode("utf-8", errors="ignore"))
+
     return hasher.hexdigest()[:24]
 
 
 def _split_long_text(text: str, max_len: int) -> list[str]:
+    """
+    Split text per sentences, fallback is splitting per words.
+    """
     text = text.strip()
     if not text:
         return []
@@ -92,6 +107,9 @@ def _split_long_text(text: str, max_len: int) -> list[str]:
 
 
 def _paragraph_chunks(text: str, max_len: int) -> list[str]:
+    """
+    Split text per paragraphs.
+    """
     paragraphs = [part.strip() for part in text.split("\n\n") if part.strip()]
     if not paragraphs:
         return []
@@ -137,6 +155,9 @@ def _tail_overlap(text: str, overlap: int) -> str:
 
 
 def _apply_overlap(chunks: list[str], overlap: int) -> list[str]:
+    """
+    Build overlap from existing chunks.
+    """
     if not chunks or overlap <= 0:
         return chunks
 
@@ -149,15 +170,19 @@ def _apply_overlap(chunks: list[str], overlap: int) -> list[str]:
 
 
 def build_chunks_for_doc(doc_id: str) -> tuple[list[Chunk], dict[str, Any]]:
+
+    # load processed text for one document
     text_path = get_text_json_path(doc_id)
     if not text_path.exists():
         raise FileNotFoundError("TEXT_JSON_NOT_FOUND")
 
+    # loads pages of text into dict
     payload = json.loads(text_path.read_text(encoding="utf-8"))
     pages = payload.get("pages", [])
     if not isinstance(pages, list):
         raise ValueError("INVALID_TEXT_JSON")
 
+    # assign metadata to each chunk
     all_chunks: list[Chunk] = []
     chunk_map: dict[str, Any] = {
         "doc_id": doc_id,

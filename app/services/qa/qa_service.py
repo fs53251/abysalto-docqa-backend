@@ -10,6 +10,7 @@ from app.core.config import settings
 from app.core.errors import ServiceUnavailable
 from app.services.interfaces import QaResult
 
+# Remove code fences that model returns
 CODE_FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
 DEFAULT_SYSTEM_PROMPT = (
     "You answer questions about uploaded business documents using only the evidence "
@@ -25,7 +26,10 @@ logger = logging.getLogger(__name__)
 
 
 class QAService:
-    """Optional OpenAI-backed answer synthesis service with safe local fallback."""
+    """
+    Optional OpenAI-backed answer synthesis service
+    with safe local fallback.
+    """
 
     def __init__(
         self,
@@ -75,6 +79,7 @@ class QAService:
             )
             return
 
+        # Create HTTP session and set default headers
         session = requests.Session()
         session.headers.update(
             {
@@ -106,6 +111,8 @@ class QAService:
             "max_output_tokens": int(self.max_output_tokens),
         }
 
+        # send POST request to:
+        # {base_url}/responses with JSON payload and timeout
         try:
             response = self._session.post(
                 f"{self.base_url}/responses",
@@ -130,7 +137,9 @@ class QAService:
                 "OpenAI answer synthesis response was not valid JSON."
             ) from exc
 
+        # extract content from response
         answer = _extract_response_text(payload)
+
         return QaResult(answer=answer, score=None)
 
 

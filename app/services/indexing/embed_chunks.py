@@ -40,6 +40,9 @@ def chunking_version() -> str:
 
 
 def _iter_chunks(doc_id: str) -> Iterator[dict[str, Any]]:
+    """
+    Document chunks iterator.
+    """
     path = get_chunks_jsonl_path(doc_id)
     if not path.exists():
         raise FileNotFoundError("CHUNKS_NOT_FOUND")
@@ -52,6 +55,9 @@ def _iter_chunks(doc_id: str) -> Iterator[dict[str, Any]]:
 
 
 def _batched(iterable: Iterator[dict[str, Any]], batch_size: int):
+    """
+    Document chunks batched iterator.
+    """
     batch: list[dict[str, Any]] = []
     for item in iterable:
         batch.append(item)
@@ -79,6 +85,7 @@ def embed_document_chunks(doc_id: str, svc: EmbeddingServicePort) -> EmbedResult
             if row_count + len(texts) > settings.MAX_CHUNKS_TO_EMBED:
                 raise ValueError("TOO_MANY_CHUNKS_TO_EMBED")
 
+            # (batch_size, emb_dim)
             embeddings = svc.encode_texts(texts)
             if embeddings.ndim != 2:
                 raise ValueError("INVALID_EMBEDDING_SHAPE")
@@ -108,6 +115,9 @@ def embed_document_chunks(doc_id: str, svc: EmbeddingServicePort) -> EmbedResult
         if matrices
         else np.zeros((0, 0), dtype=np.float32)
     )
+
+    # Save embeddings for this document as .npy (native binary format)
+    # Saved: full array, shape, dtype, values!!!
     np.save(npy_path, matrix)
 
     info = {
