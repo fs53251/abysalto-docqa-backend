@@ -48,6 +48,7 @@ ask_rate_limit = rate_limit(
     key_fn=identity_rate_limit_key("ask"),
 )
 
+
 # Hash a set of document IDs
 def _docs_digest(doc_ids: list[str]) -> str:
     return hashlib.sha256(",".join(sorted(set(doc_ids))).encode("utf-8")).hexdigest()[
@@ -66,6 +67,7 @@ def _scope_cache_key(
         :12
     ]
     return f"{scope_mode}:{identity_hash}:{_docs_digest(doc_ids)}"
+
 
 # Find all documents owned by the current identity
 # Documents must be indexed and ready for retrieval
@@ -113,6 +115,7 @@ def _resolve_requested_scope(
         doc_ids.append(public_id)
         filename_by_doc_id[public_id] = document.filename
     return doc_ids, filename_by_doc_id
+
 
 # Retrieved chunk objects -> plain dictionary
 def _serialize_hits(hits: list[RetrievedChunk]) -> list[dict[str, object]]:

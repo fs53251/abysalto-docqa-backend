@@ -95,6 +95,7 @@ def identity_rate_limit_key(namespace: str) -> RateLimitKeyFn:
     """
     Creates a key based on the authenticated/request identity.
     """
+
     def _key(request: Request, identity: RequestIdentity) -> str:
         del request
         return f"{namespace}:{identity.log_identity}"
@@ -107,6 +108,7 @@ def login_rate_limit_key(namespace: str = "login") -> RateLimitKeyFn:
     Creates specialized key for login attempts:
         Uses client IP and email from request body
     """
+
     async def _key(request: Request, identity: RequestIdentity) -> str:
         del identity
 
@@ -149,6 +151,7 @@ def rate_limit(
         - per-user API
         - per-IP request
     """
+
     async def _dependency(
         request: Request,
         identity: CurrentIdentity,
